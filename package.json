@@ -1,0 +1,12 @@
+{
+  "name": "consensus-platform",
+  "private": true,
+  "workspaces": ["packages/*", "apps/api-gateway"],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api-gateway",
+    "build:api": "npm run build --workspace=apps/api-gateway",
+    "test:api": "npm run test --workspace=apps/api-gateway",
+    "docker:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infrastructure/docker/docker-compose.yml down"
+  }
+}
