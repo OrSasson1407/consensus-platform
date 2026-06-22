@@ -1,42 +1,23 @@
-import { Response, NextFunction } from "express";
-import { AuthRequest } from "../middleware/auth.middleware";
-import { pool } from "../config/database";
-import { fetchPopularMovies, tmdbMovieToContentItem } from "../services/tmdb.service";
-import { fetchNearbyRestaurants, placeToContentItem } from "../services/googlePlaces.service";
-import { AppError } from "../middleware/errorHandler.middleware";
+﻿import { Request, Response } from 'express';
 
-export async function getContentItems(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export const getContentItems = async (req: Request, res: Response) => {
   try {
-    const { category } = req.query as { category: string };
-    if (!category) throw new AppError(400, "category query param required");
+    res.status(200).json({ items: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch content items' });
+  }
+};
 
-    // If TMDB key present and MOVIES requested, fetch live
-    if (category === "MOVIES") {
-      const movies = await fetchPopularMovies();
-      if (movies.length > 0) {
-        res.json(movies.map(tmdbMovieToContentItem));
-        return;
-      }
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM content_items WHERE category_type = $1 ORDER BY created_at LIMIT 30`,
-      [category]
-    );
-    res.json(result.rows);
-  } catch (err) { next(err); }
-}
-
-export async function getRestaurantsNearby(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export const getRestaurantsNearby = async (req: Request, res: Response) => {
   try {
-    const { lat, lng } = req.query as { lat: string; lng: string };
-    if (!lat || !lng) throw new AppError(400, "lat and lng required");
-    const places = await fetchNearbyRestaurants(parseFloat(lat), parseFloat(lng));
-    if (places.length > 0) {
-      res.json(places.map(placeToContentItem));
-      return;
-    }
-    const result = await pool.query(`SELECT * FROM content_items WHERE category_type = 'RESTAURANTS' LIMIT 20`);
-    res.json(result.rows);
-  } catch (err) { next(err); }
-}
+    const { lat, lng, radius } = req.query;
+    // TODO: Integrate Google Places API Service here
+    res.status(200).json({ 
+      restaurants: [
+        { id: "place_1", name: "Mock Burger Joint", rating: 4.5 }
+      ] 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch nearby restaurants' });
+  }
+};

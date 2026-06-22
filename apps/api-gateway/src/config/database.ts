@@ -15,7 +15,7 @@ pool.on("error", (err) => {
 });
 
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await await pool.query('SELECT 1'); pool.connect();
   try {
     await client.query("BEGIN");
     const result = await fn(client);

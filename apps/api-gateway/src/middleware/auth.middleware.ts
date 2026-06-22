@@ -1,23 +1,23 @@
-import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { env } from "../config/env";
+﻿import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 
-export interface AuthRequest extends Request {
-  userId?: string;
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'consensus_super_secret_dev_key';
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing or invalid authorization header" });
-    return;
+export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
+
+  const token = authHeader.split(' ')[1];
+
   try {
-    const token = header.split(" ")[1];
-    const payload = jwt.verify(token, env.JWT_SECRET) as { userId: string };
-    req.userId = payload.userId;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // @ts-ignore
+    req.user = decoded; // Attaches the decoded JWT payload (e.g., { id: '...', phone: '...' })
     next();
-  } catch {
-    res.status(401).json({ error: "Token invalid or expired" });
+  } catch (error) {
+    return res.status(403).json({ error: 'Forbidden: Invalid or expired token' });
   }
-}
+};

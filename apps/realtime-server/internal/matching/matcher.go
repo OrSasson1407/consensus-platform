@@ -1,86 +1,106 @@
-package matching
+﻿package matching
 
 import (
     "context"
     "encoding/json"
-    "fmt"
     "log"
     "sync"
-
     "github.com/gorilla/websocket"
-    redisclient "consensus-platform/apps/realtime-server/internal/redis"
-    "consensus-platform/apps/realtime-server/internal/models"
 )
 
-type Hub struct {
-    mu      sync.RWMutex
-    rooms   map[string]map[string]*websocket.Conn // roomID -> userID -> conn
-    redis   *redisclient.Client
+type Client struct {
+    Conn   *websocket.Conn
+    UserID string
 }
 
-func NewHub(rc *redisclient.Client) *Hub {
+type Hub struct {
+    sync.RWMutex
+    Rooms  map[string]map[*Client]bool
+    Swipes map[string]map[string]int // RoomID -> ItemID -> Like Count
+}
+
+func NewHub() *Hub {
     return &Hub{
-        rooms: make(map[string]map[string]*websocket.Conn),
-        redis: rc,
+        Rooms:  make(map[string]map[*Client]bool),
+        Swipes: make(map[string]map[string]int),
     }
 }
 
 func (h *Hub) JoinRoom(roomID, userID string, conn *websocket.Conn) {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-    if h.rooms[roomID] == nil {
-        h.rooms[roomID] = make(map[string]*websocket.Conn)
+    h.Lock()
+    defer h.Unlock()
+    if _, ok := h.Rooms[roomID]; !ok {
+        h.Rooms[roomID] = make(map[*Client]bool)
+        h.Swipes[roomID] = make(map[string]int)
     }
-    h.rooms[roomID][userID] = conn
-    h.redis.AddMember(context.Background(), roomID, userID)
+    client := &Client{Conn: conn, UserID: userID}
+    h.Rooms[roomID][client] = true
     log.Printf("User %s joined room %s", userID, roomID)
 }
 
 func (h *Hub) LeaveRoom(roomID, userID string) {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-    if h.rooms[roomID] != nil {
-        delete(h.rooms[roomID], userID)
+    h.Lock()
+    defer h.Unlock()
+    if clients, ok := h.Rooms[roomID]; ok {
+        for c := range clients {
+            if c.UserID == userID {
+                delete(clients, c)
+                c.Conn.Close()
+            }
+        }
+        if len(h.Rooms[roomID]) == 0 {
+            delete(h.Rooms, roomID)
+            delete(h.Swipes, roomID)
+        }
     }
 }
 
 func (h *Hub) HandleSwipe(ctx context.Context, roomID, userID, itemID, status string) {
-    isMatch, err := h.redis.RecordSwipe(ctx, roomID, userID, itemID, status)
-    if err != nil {
-        log.Printf("Redis error: %v", err)
-        return
-    }
-    if isMatch {
-        h.broadcastMatch(roomID, itemID)
-    }
-}
+    h.Lock()
+    defer h.Unlock()
 
-func (h *Hub) broadcastMatch(roomID, itemID string) {
-    event := models.OutgoingEvent{
-        EventType: "DECISION_MATCH",
-        Payload: models.MatchPayload{
-            RoomID: roomID,
-            MatchedItem: models.MatchedItem{
-                ID:    itemID,
-                Title: fmt.Sprintf("Item %s", itemID),
+    if status == "LIKE" {
+        if h.Swipes[roomID] == nil {
+            h.Swipes[roomID] = make(map[string]int)
+        }
+        h.Swipes[roomID][itemID]++
+
+        activeUsers := len(h.Rooms[roomID])
+        
+        // Broadcast standard update
+        updateMsg := map[string]interface{}{
+            "event_type": "ROOM_UPDATE",
+            "payload": map[string]interface{}{
+                "room_id": roomID,
+                "swipe_counts": h.Swipes[roomID],
             },
-        },
-    }
-    b, _ := json.Marshal(event)
+        }
+        h.broadcast(roomID, updateMsg)
 
-    h.mu.RLock()
-    defer h.mu.RUnlock()
-    for _, conn := range h.rooms[roomID] {
-        conn.WriteMessage(websocket.TextMessage, b)
+        // Check for Consensus
+        if h.Swipes[roomID][itemID] >= activeUsers && activeUsers > 0 {
+            matchMsg := map[string]interface{}{
+                "event_type": "DECISION_MATCH",
+                "payload": map[string]interface{}{
+                    "room_id": roomID,
+                    "matched_item": map[string]string{"id": itemID},
+                },
+            }
+            h.broadcast(roomID, matchMsg)
+            log.Printf("CONSENSUS REACHED in room %s for item %s", roomID, itemID)
+        }
     }
-    log.Printf("Match in room %s for item %s", roomID, itemID)
 }
 
-func (h *Hub) Broadcast(roomID string, event models.OutgoingEvent) {
-    b, _ := json.Marshal(event)
-    h.mu.RLock()
-    defer h.mu.RUnlock()
-    for _, conn := range h.rooms[roomID] {
-        conn.WriteMessage(websocket.TextMessage, b)
+func (h *Hub) broadcast(roomID string, message interface{}) {
+    if clients, ok := h.Rooms[roomID]; ok {
+        msgBytes, _ := json.Marshal(message)
+        for client := range clients {
+            err := client.Conn.WriteMessage(websocket.TextMessage, msgBytes)
+            if err != nil {
+                client.Conn.Close()
+                delete(clients, client)
+            }
+        }
     }
 }

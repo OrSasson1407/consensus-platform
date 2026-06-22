@@ -1,73 +1,25 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: consensus-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: consensus
     ports:
-      - "5432:5432"
-    volumes:
-      - consensus_pg_data:/var/lib/postgresql/data
+      - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d consensus"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   redis:
     image: redis:7-alpine
     container_name: consensus-redis
-    restart: unless-stopped
     ports:
       - "6379:6379"
-    volumes:
-      - consensus_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-  api-gateway:
-    build:
-      context: ../../apps/api-gateway
-      dockerfile: Dockerfile
-    container_name: consensus-api
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/consensus
-      JWT_SECRET: ${JWT_SECRET:-consensus-dev-secret-change-in-prod}
-      TMDB_API_KEY: ${TMDB_API_KEY:-}
-      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
-      REALTIME_SERVER_URL: http://realtime-server:8080
-      PORT: 3001
-    ports:
-      - "3001:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  realtime-server:
-    build:
-      context: ../../apps/realtime-server
-      dockerfile: Dockerfile
-    container_name: consensus-realtime
-    restart: unless-stopped
-    environment:
-      REDIS_ADDR: redis:6379
-      JWT_SECRET: ${JWT_SECRET:-consensus-dev-secret-change-in-prod}
-      PORT: 8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
-  consensus_pg_data:
-  consensus_redis_data:
