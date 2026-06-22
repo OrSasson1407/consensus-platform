@@ -7,11 +7,13 @@ import (
     "net/http"
 
     "github.com/gorilla/websocket"
-    "consensus-platform/apps/realtime-server/internal/matching"
+    "consensus-realtime/internal/matching"
 )
 
 var upgrader = websocket.Upgrader{
-    CheckOrigin: func(r *http.Request) bool { return true },
+    ReadBufferSize:  1024,
+    WriteBufferSize: 1024,
+    CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 type rawEvent struct {
@@ -35,7 +37,7 @@ func WebSocketHandler(hub *matching.Hub) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         conn, err := upgrader.Upgrade(w, r, nil)
         if err != nil {
-            log.Printf("Upgrade error: %v", err)
+            log.Printf("[WS] Upgrade error: %v", err)
             return
         }
 
@@ -51,27 +53,44 @@ func WebSocketHandler(hub *matching.Hub) http.HandlerFunc {
         for {
             _, msg, err := conn.ReadMessage()
             if err != nil {
+                if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+                    log.Printf("[WS] Unexpected close: %v", err)
+                }
                 break
             }
 
             var ev rawEvent
             if err := json.Unmarshal(msg, &ev); err != nil {
-                log.Printf("Invalid message: %v", err)
+                log.Printf("[WS] Parse error: %v", err)
                 continue
             }
 
             switch ev.EventType {
             case "JOIN_ROOM":
                 var p joinPayload
-                json.Unmarshal(ev.Payload, &p)
+                if err := json.Unmarshal(ev.Payload, &p); err != nil {
+                    log.Printf("[WS] Bad JOIN_ROOM payload: %v", err)
+                    continue
+                }
                 currentRoom = p.RoomID
                 currentUser = p.UserID
                 hub.JoinRoom(p.RoomID, p.UserID, conn)
+                ack, _ := json.Marshal(map[string]interface{}{
+                    "event_type": "ROOM_JOINED",
+                    "payload":    map[string]string{"room_id": p.RoomID, "user_id": p.UserID},
+                })
+                conn.WriteMessage(websocket.TextMessage, ack)
 
             case "USER_SWIPE":
                 var p swipePayload
-                json.Unmarshal(ev.Payload, &p)
+                if err := json.Unmarshal(ev.Payload, &p); err != nil {
+                    log.Printf("[WS] Bad USER_SWIPE payload: %v", err)
+                    continue
+                }
                 hub.HandleSwipe(context.Background(), p.RoomID, p.UserID, p.ContentItemID, p.Status)
+
+            default:
+                log.Printf("[WS] Unknown event_type: %s", ev.EventType)
             }
         }
     }

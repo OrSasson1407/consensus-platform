@@ -1,63 +1,54 @@
-﻿import { Request, Response } from 'express';
-import crypto from 'crypto';
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "../middleware/auth.middleware";
+import {
+  createRoom, joinRoom, getRoomById,
+  getRoomContent, getRoomMembers, recordSwipe,
+  CategoryType
+} from "../services/room.service";
+import { AppError } from "../middleware/errorHandler.middleware";
 
-export const handleCreateRoom = async (req: Request, res: Response) => {
+const VALID_CATEGORIES: CategoryType[] = ["MOVIES", "RESTAURANTS", "ACTIVITIES"];
+
+export async function handleCreateRoom(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { category_type } = req.body;
-    const roomId = crypto.randomUUID();
-    // TODO: Insert into PostgreSQL rooms table
-    res.status(201).json({ room_id: roomId, category_type, message: "Room created successfully" });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create room' });
-  }
-};
+    if (!VALID_CATEGORIES.includes(category_type))
+      throw new AppError(400, `category_type must be one of: ${VALID_CATEGORIES.join(", ")}`);
+    res.status(201).json(await createRoom(req.userId!, category_type));
+  } catch (err) { next(err); }
+}
 
-export const handleJoinRoom = async (req: Request, res: Response) => {
+export async function handleJoinRoom(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    // @ts-ignore
-    const userId = req.user?.id || 'mock_user_id';
-    // TODO: Insert into PostgreSQL room_members table
-    res.status(200).json({ room_id: id, user_id: userId, message: "Joined room successfully" });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to join room' });
-  }
-};
+    res.json(await joinRoom(req.params.id, req.userId!));
+  } catch (err) { next(err); }
+}
 
-export const handleGetRoom = async (req: Request, res: Response) => {
+export async function handleGetRoom(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    res.status(200).json({ room_id: id, status: "active" });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch room' });
-  }
-};
+    res.json(await getRoomById(req.params.id));
+  } catch (err) { next(err); }
+}
 
-export const handleGetContent = async (req: Request, res: Response) => {
+export async function handleGetContent(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    // TODO: Fetch content_items assigned to this room_id from DB
-    res.status(200).json({ items: [{ id: "item_1", title: "Sample Content 1" }] });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch room content' });
-  }
-};
+    res.json(await getRoomContent(req.params.id));
+  } catch (err) { next(err); }
+}
 
-export const handleGetMembers = async (req: Request, res: Response) => {
+export async function handleGetMembers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    // TODO: Fetch from room_members joined with users
-    res.status(200).json({ members: [] });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch room members' });
-  }
-};
+    res.json(await getRoomMembers(req.params.id));
+  } catch (err) { next(err); }
+}
 
-export const handleSwipe = async (req: Request, res: Response) => {
+export async function handleSwipe(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    // Fallback REST endpoint if WebSocket isn't used for a specific action
-    res.status(200).json({ message: "Swipe recorded via REST" });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to record swipe' });
-  }
-};
+    const { content_item_id, swipe_status } = req.body;
+    if (!content_item_id || !swipe_status)
+      throw new AppError(400, "content_item_id and swipe_status are required");
+    if (!["LIKE", "DISLIKE", "SUPERLIKE"].includes(swipe_status))
+      throw new AppError(400, "swipe_status must be LIKE, DISLIKE or SUPERLIKE");
+    res.json(await recordSwipe(req.params.id, req.userId!, content_item_id, swipe_status));
+  } catch (err) { next(err); }
+}

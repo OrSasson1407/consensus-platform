@@ -1,106 +1,111 @@
-﻿package matching
+package matching
 
 import (
     "context"
     "encoding/json"
     "log"
     "sync"
+
     "github.com/gorilla/websocket"
+    redisclient "consensus-realtime/internal/redis"
 )
 
-type Client struct {
-    Conn   *websocket.Conn
-    UserID string
+type connection struct {
+    conn *websocket.Conn
+    mu   sync.Mutex
+}
+
+func (c *connection) send(data []byte) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.conn.WriteMessage(websocket.TextMessage, data)
 }
 
 type Hub struct {
-    sync.RWMutex
-    Rooms  map[string]map[*Client]bool
-    Swipes map[string]map[string]int // RoomID -> ItemID -> Like Count
+    mu    sync.RWMutex
+    rooms map[string]map[string]*connection
+    redis *redisclient.Client
 }
 
-func NewHub() *Hub {
+func NewHub(rc *redisclient.Client) *Hub {
     return &Hub{
-        Rooms:  make(map[string]map[*Client]bool),
-        Swipes: make(map[string]map[string]int),
+        rooms: make(map[string]map[string]*connection),
+        redis: rc,
     }
 }
 
 func (h *Hub) JoinRoom(roomID, userID string, conn *websocket.Conn) {
-    h.Lock()
-    defer h.Unlock()
-    if _, ok := h.Rooms[roomID]; !ok {
-        h.Rooms[roomID] = make(map[*Client]bool)
-        h.Swipes[roomID] = make(map[string]int)
+    h.mu.Lock()
+    if h.rooms[roomID] == nil {
+        h.rooms[roomID] = make(map[string]*connection)
     }
-    client := &Client{Conn: conn, UserID: userID}
-    h.Rooms[roomID][client] = true
-    log.Printf("User %s joined room %s", userID, roomID)
+    h.rooms[roomID][userID] = &connection{conn: conn}
+    h.mu.Unlock()
+
+    if err := h.redis.AddMember(context.Background(), roomID, userID); err != nil {
+        log.Printf("[Hub] Redis AddMember error: %v", err)
+    }
+    log.Printf("[Hub] %s joined room %s", userID, roomID)
 }
 
 func (h *Hub) LeaveRoom(roomID, userID string) {
-    h.Lock()
-    defer h.Unlock()
-    if clients, ok := h.Rooms[roomID]; ok {
-        for c := range clients {
-            if c.UserID == userID {
-                delete(clients, c)
-                c.Conn.Close()
-            }
-        }
-        if len(h.Rooms[roomID]) == 0 {
-            delete(h.Rooms, roomID)
-            delete(h.Swipes, roomID)
+    h.mu.Lock()
+    if h.rooms[roomID] != nil {
+        delete(h.rooms[roomID], userID)
+        if len(h.rooms[roomID]) == 0 {
+            delete(h.rooms, roomID)
         }
     }
+    h.mu.Unlock()
+
+    h.redis.RemoveMember(context.Background(), roomID, userID)
+    log.Printf("[Hub] %s left room %s", userID, roomID)
 }
 
 func (h *Hub) HandleSwipe(ctx context.Context, roomID, userID, itemID, status string) {
-    h.Lock()
-    defer h.Unlock()
+    isMatch, err := h.redis.RecordSwipe(ctx, roomID, userID, itemID, status)
+    if err != nil {
+        log.Printf("[Hub] Redis RecordSwipe error: %v", err)
+        return
+    }
 
-    if status == "LIKE" {
-        if h.Swipes[roomID] == nil {
-            h.Swipes[roomID] = make(map[string]int)
-        }
-        h.Swipes[roomID][itemID]++
-
-        activeUsers := len(h.Rooms[roomID])
-        
-        // Broadcast standard update
-        updateMsg := map[string]interface{}{
-            "event_type": "ROOM_UPDATE",
-            "payload": map[string]interface{}{
-                "room_id": roomID,
-                "swipe_counts": h.Swipes[roomID],
+    // Broadcast update to room
+    updateMsg, _ := json.Marshal(map[string]interface{}{
+        "event_type": "ROOM_UPDATE",
+        "payload": map[string]interface{}{
+            "room_id": roomID,
+            "last_swipe": map[string]string{
+                "user_id": userID,
+                "item_id": itemID,
+                "status":  status,
             },
-        }
-        h.broadcast(roomID, updateMsg)
+        },
+    })
+    h.broadcast(roomID, updateMsg)
 
-        // Check for Consensus
-        if h.Swipes[roomID][itemID] >= activeUsers && activeUsers > 0 {
-            matchMsg := map[string]interface{}{
-                "event_type": "DECISION_MATCH",
-                "payload": map[string]interface{}{
-                    "room_id": roomID,
-                    "matched_item": map[string]string{"id": itemID},
-                },
-            }
-            h.broadcast(roomID, matchMsg)
-            log.Printf("CONSENSUS REACHED in room %s for item %s", roomID, itemID)
-        }
+    if isMatch {
+        matchMsg, _ := json.Marshal(map[string]interface{}{
+            "event_type": "DECISION_MATCH",
+            "payload": map[string]interface{}{
+                "room_id":      roomID,
+                "matched_item": map[string]string{"id": itemID},
+            },
+        })
+        h.broadcast(roomID, matchMsg)
+        log.Printf("[Hub] MATCH in room %s for item %s", roomID, itemID)
     }
 }
 
-func (h *Hub) broadcast(roomID string, message interface{}) {
-    if clients, ok := h.Rooms[roomID]; ok {
-        msgBytes, _ := json.Marshal(message)
-        for client := range clients {
-            err := client.Conn.WriteMessage(websocket.TextMessage, msgBytes)
-            if err != nil {
-                client.Conn.Close()
-                delete(clients, client)
-            }
-        }
+// broadcast sends to all conns in a room WITHOUT holding any lock.
+func (h *Hub) broadcast(roomID string, data []byte) {
+    h.mu.RLock()
+    conns := make([]*connection, 0, len(h.rooms[roomID]))
+    for _, c := range h.rooms[roomID] {
+        conns = append(conns, c)
+    }
+    h.mu.RUnlock()
+
+    for _, c := range conns {
+        go c.send(data)
     }
 }

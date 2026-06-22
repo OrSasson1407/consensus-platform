@@ -4,7 +4,7 @@ import { authMiddleware } from "../middleware/auth.middleware";
 import { validateBody } from "../middleware/validate.middleware";
 
 const router = Router();
-router.post("/register", validateBody({ phone_number: "string", display_name: "string" }), register);
+router.post("/register", validateBody(["phone_number", "display_name"]), register);
 router.get("/me", authMiddleware, getMe);
 router.patch("/me", authMiddleware, updateMe);
 export default router;

@@ -1,23 +1,35 @@
-﻿import { Request, Response } from 'express';
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "../middleware/auth.middleware";
+import { pool } from "../config/database";
+import { fetchPopularMovies, tmdbMovieToContentItem } from "../services/tmdb.service";
+import { fetchNearbyRestaurants, placeToContentItem } from "../services/googlePlaces.service";
+import { AppError } from "../middleware/errorHandler.middleware";
 
-export const getContentItems = async (req: Request, res: Response) => {
+export async function getContentItems(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.status(200).json({ items: [] });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch content items' });
-  }
-};
+    const category = req.query.category as string;
+    if (!category) throw new AppError(400, "category query param is required");
+    if (category === "MOVIES") {
+      const movies = await fetchPopularMovies();
+      if (movies.length > 0) { res.json(movies.map(tmdbMovieToContentItem)); return; }
+    }
+    const r = await pool.query(
+      "SELECT * FROM content_items WHERE category_type = $1 ORDER BY created_at LIMIT 30",
+      [category]
+    );
+    res.json(r.rows);
+  } catch (err) { next(err); }
+}
 
-export const getRestaurantsNearby = async (req: Request, res: Response) => {
+export async function getRestaurantsNearby(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { lat, lng, radius } = req.query;
-    // TODO: Integrate Google Places API Service here
-    res.status(200).json({ 
-      restaurants: [
-        { id: "place_1", name: "Mock Burger Joint", rating: 4.5 }
-      ] 
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch nearby restaurants' });
-  }
-};
+    const { lat, lng } = req.query as { lat: string; lng: string };
+    if (!lat || !lng) throw new AppError(400, "lat and lng query params are required");
+    const places = await fetchNearbyRestaurants(parseFloat(lat), parseFloat(lng));
+    if (places.length > 0) { res.json(places.map(placeToContentItem)); return; }
+    const r = await pool.query(
+      "SELECT * FROM content_items WHERE category_type = 'RESTAURANTS' LIMIT 20"
+    );
+    res.json(r.rows);
+  } catch (err) { next(err); }
+}
