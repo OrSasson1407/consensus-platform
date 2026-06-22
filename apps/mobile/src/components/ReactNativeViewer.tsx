@@ -4,9 +4,13 @@ import {
   EXPLORE_RN_CODE, 
   SWIPE_DECK_RN_CODE, 
   MATCH_RN_CODE, 
-  PROFILE_RN_CODE 
+  PROFILE_RN_CODE,
+  APP_RN_CODE,
+  AUTH_STORE_CODE,
+  ROOM_STORE_CODE,
+  PACKAGE_JSON_CODE
 } from '../data/rnCodeStrings';
-import { Check, Copy, Code, Smartphone, Compass, Layers, Sparkles, User } from 'lucide-react';
+import { Check, Copy, Code, Smartphone, Compass, Layers, Sparkles, User, Home, Database, Package } from 'lucide-react';
 
 interface Tab {
   id: string;
@@ -17,6 +21,10 @@ interface Tab {
 
 export default function ReactNativeViewer() {
   const tabs: Tab[] = [
+    { id: 'app', name: 'App.tsx', icon: Home, code: APP_RN_CODE },
+    { id: 'package', name: 'package.json', icon: Package, code: PACKAGE_JSON_CODE },
+    { id: 'auth_store', name: 'useAuthStore.ts', icon: Database, code: AUTH_STORE_CODE },
+    { id: 'room_store', name: 'useRoomStore.ts', icon: Database, code: ROOM_STORE_CODE },
     { id: 'onboarding', name: 'OnboardingScreen.tsx', icon: Smartphone, code: ONBOARDING_RN_CODE },
     { id: 'explore', name: 'ExploreScreen.tsx', icon: Compass, code: EXPLORE_RN_CODE },
     { id: 'swipe', name: 'SwipeDeckScreen.tsx', icon: Layers, code: SWIPE_DECK_RN_CODE },
@@ -24,7 +32,7 @@ export default function ReactNativeViewer() {
     { id: 'profile', name: 'ProfileScreen.tsx', icon: User, code: PROFILE_RN_CODE }
   ];
 
-  const [activeTab, setActiveTab] = useState('onboarding');
+  const [activeTab, setActiveTab] = useState('app');
   const [copied, setCopied] = useState(false);
 
   const activeCode = tabs.find(t => t.id === activeTab)?.code || '';

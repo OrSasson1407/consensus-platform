@@ -2218,3 +2218,158 @@ const styles = StyleSheet.create({
   }
 });
 `;
+
+export const APP_RN_CODE = `import React, { useState } from 'react';
+import { View, StyleSheet, StatusBar } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+import ExploreScreen from './src/screens/ExploreScreen';
+import SwipeDeckScreen from './src/screens/SwipeDeckScreen';
+import MatchCelebrationScreen from './src/screens/MatchCelebrationScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+
+type ScreenName = 'Onboarding' | 'Explore' | 'SwipeDeck' | 'MatchCelebration' | 'Profile';
+
+export default function App() {
+  const [currentScreen, setCurrentScreen] = useState<ScreenName>('Onboarding');
+  const [navigationHistory, setNavigationHistory] = useState<ScreenName[]>(['Onboarding']);
+
+  // Custom high fidelity navigation simulator
+  const navigation = {
+    navigate: (screen: ScreenName) => {
+      setCurrentScreen(screen);
+      setNavigationHistory((prev) => [...prev, screen]);
+    },
+    replace: (screen: ScreenName) => {
+      setCurrentScreen(screen);
+      setNavigationHistory([screen]);
+    },
+    goBack: () => {
+      if (navigationHistory.length > 1) {
+        const nextHistory = [...navigationHistory];
+        nextHistory.pop(); // Remove active
+        const previous = nextHistory[nextHistory.length - 1];
+        setNavigationHistory(nextHistory);
+        setCurrentScreen(previous);
+      } else {
+        setCurrentScreen('Onboarding');
+      }
+    },
+    openDrawer: () => {
+      // Direct user straight to Profile setting drawer!
+      setCurrentScreen('Profile');
+    }
+  };
+
+  const renderActiveScreen = () => {
+    switch (currentScreen) {
+      case 'Onboarding':
+        return <OnboardingScreen navigation={navigation} />;
+      case 'Explore':
+        return <ExploreScreen navigation={navigation} />;
+      case 'SwipeDeck':
+        return <SwipeDeckScreen navigation={navigation} />;
+      case 'MatchCelebration':
+        return <MatchCelebrationScreen navigation={navigation} />;
+      case 'Profile':
+        return <ProfileScreen navigation={navigation} />;
+      default:
+        return <OnboardingScreen navigation={navigation} />;
+    }
+  };
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.appContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#0a0a0f" />
+        {renderActiveScreen()}
+      </View>
+    </GestureHandlerRootView>
+  );
+}
+
+const styles = StyleSheet.create({
+  appContainer: {
+    flex: 1,
+    backgroundColor: '#0a0a0f',
+  },
+});
+`;
+
+export const AUTH_STORE_CODE = `import { create } from 'zustand';
+
+interface User {
+  phone: string;
+  name: string;
+  handle: string;
+  email?: string;
+}
+
+interface AuthState {
+  token: string | null;
+  user: User | null;
+  setAuth: (payload: { token?: string; user: Partial<User> } | null) => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  token: 'mock-session-jwt-10924',
+  user: {
+    phone: '+1 (555) 012-3456',
+    name: 'Jordan D.',
+    email: 'jordan.d@example.com',
+    handle: '@jordan_consensus',
+  },
+  setAuth: (payload) => set((state) => {
+    if (!payload) return { token: null, user: null };
+    return {
+      token: payload.token !== undefined ? payload.token : state.token,
+      user: payload.user ? { ...state.user, ...payload.user } as User : state.user,
+    };
+  }),
+}));
+`;
+
+export const ROOM_STORE_CODE = `import { create } from 'zustand';
+
+interface RoomState {
+  activeRoomId: string | null;
+  activeCategory: string | null;
+  create: (category: string) => void;
+  reset: () => void;
+}
+
+export const useRoomStore = create<RoomState>((set) => ({
+  activeRoomId: null,
+  activeCategory: null,
+  create: (category) => set({ activeRoomId: 'room_7721', activeCategory: category }),
+  reset: () => set({ activeRoomId: null, activeCategory: null }),
+}));
+`;
+
+export const PACKAGE_JSON_CODE = `{
+  "name": "consensus-mobile",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-status-bar": "~1.11.1",
+    "react": "18.2.0",
+    "react-native": "0.74.1",
+    "react-native-gesture-handler": "~2.16.1",
+    "react-native-reanimated": "~3.10.1",
+    "expo-image": "~1.12.12",
+    "react-native-skeleton-content": "^1.0.2",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "typescript": "~5.3.3"
+  },
+  "private": true
+}
+`;
