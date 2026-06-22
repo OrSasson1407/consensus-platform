@@ -9,11 +9,6 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
-        'react-native': path.resolve(__dirname, './src/web-mocks/react-native.tsx'),
-        'expo-image': path.resolve(__dirname, './src/web-mocks/expo-image.tsx'),
-        'react-native-gesture-handler': path.resolve(__dirname, './src/web-mocks/react-native-gesture-handler.tsx'),
-        'react-native-reanimated': path.resolve(__dirname, './src/web-mocks/react-native-reanimated.tsx'),
-        'react-native-skeleton-content': path.resolve(__dirname, './src/web-mocks/react-native-skeleton-content.tsx'),
       },
     },
     server: {

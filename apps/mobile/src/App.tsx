@@ -1,911 +1,1049 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  CATEGORIES, 
-  CARDS_POOL, 
-  ActivityCard 
-} from './data/mockData';
-import ReactNativeViewer from './components/ReactNativeViewer';
+  motion, 
+  AnimatePresence 
+} from 'motion/react';
 import { 
   Smartphone, 
-  Sparkles, 
-  User, 
-  Compass, 
   Check, 
-  X, 
-  RotateCcw, 
+  Copy, 
+  Plus, 
+  RefreshCw, 
+  User as UserIcon, 
+  Share2, 
   Heart, 
-  ChevronRight, 
-  Info,
-  LogOut,
-  Save,
+  X, 
+  ChevronLeft, 
+  LogOut, 
+  Users, 
+  Radio, 
+  Film, 
+  Utensils, 
+  Compass, 
+  Code, 
   CheckCircle,
-  Copy
+  ExternalLink,
+  Laptop
 } from 'lucide-react';
 
+import { MOCK_MOVIES, MOCK_RESTAURANTS, MOCK_ACTIVITIES, ContentItem } from './data/mockContent';
+import { EXPO_CODE_FILES, CodeFile } from './data/expoCodeMap';
+
+interface User {
+  id: string;
+  phone_number: string;
+  display_name: string;
+}
+
+interface ConfettiPiece {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  delay: number;
+  duration: number;
+}
+
 export default function App() {
-  // Mobile Router States: 'onboarding' | 'explore' | 'swipe' | 'match' | 'profile'
-  const [currentScreen, setCurrentScreen] = useState<'onboarding' | 'explore' | 'swipe' | 'match' | 'profile'>('onboarding');
+  // --- Developer Dashboard State ---
+  const [activeTab, setActiveTab] = useState<'simulation' | 'components'>('simulation');
+  const [selectedCodeFile, setSelectedCodeFile] = useState<CodeFile>(EXPO_CODE_FILES[0]);
+  const [copiedFileIndex, setCopiedFileIndex] = useState<boolean>(false);
+  const [simFriendsEnabled, setSimFriendsEnabled] = useState<boolean>(true);
+  const [forceMatchState, setForceMatchState] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Reactively shared user profile models (Zundand mock binding simulation)
-  const [userName, setUserName] = useState('Alex');
-  const [phoneNumber, setPhoneNumber] = useState('(555) 012-3456');
-  const [emailAddress, setEmailAddress] = useState('alex@consensus.io');
-  const [userHandle, setUserHandle] = useState('@alex');
+  // --- Phone Simulator State ---
+  const [phoneScreen, setPhoneScreen] = useState<'Onboarding' | 'RoomCreate' | 'SwipeDeck' | 'Match' | 'Profile'>('Onboarding');
+  const [currentPhoneTime, setCurrentPhoneTime] = useState<string>('09:41');
+  
+  // Custom User Session Variables
+  const [userToken, setUserToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [lobbyCategory, setLobbyCategory] = useState<'MOVIES' | 'RESTAURANTS' | 'ACTIVITIES'>('MOVIES');
+  const [membersInLobby, setMembersInLobby] = useState<User[]>([]);
+  
+  // Swiping State inside the Simulator
+  const [deckSwipedCount, setDeckSwipedCount] = useState<number>(0);
+  const [hasAllAgreedMatch, setHasAllAgreedMatch] = useState<boolean>(false);
+  const [matchedItemData, setMatchedItemData] = useState<any>(null);
+  
+  // Confetti Pieces for Match Screen
+  const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
 
-  // Interactive Room Selection state
-  const [selectedCategory, setSelectedCategory] = useState<string>('movies');
-  const [roomCode, setRoomCode] = useState('');
-  const [recentRoomName, setRecentRoomName] = useState('Friday Dinner');
-
-  // Simulated loading state for categories
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
-
-  // Swiping state variables
-  const [swipeStack, setSwipeStack] = useState<ActivityCard[]>(CARDS_POOL.movies);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
-  const [swipeActionMessage, setSwipeActionMessage] = useState<'like' | 'nope' | null>(null);
-
-  // Stats Counters
-  const [roomsCount, setRoomsCount] = useState(24);
-  const [matchesCount, setMatchesCount] = useState(182);
-
-  // Synchronize category select changes to reload corresponding pools
+  // Update clock every minute
   useEffect(() => {
-    if (CARDS_POOL[selectedCategory]) {
-      setSwipeStack(CARDS_POOL[selectedCategory]);
-      setCurrentCardIndex(0);
-    }
-  }, [selectedCategory]);
+    const updateTime = () => {
+      const now = new Date();
+      const hrs = now.getHours().toString().padStart(2, '0');
+      const mins = now.getMinutes().toString().padStart(2, '0');
+      setCurrentPhoneTime(`${hrs}:${mins}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Trigger simulated categories loading skeleton when opening explore screen
+  // Sync simulated members when options change or user logs in
   useEffect(() => {
-    if (currentScreen === 'explore') {
-      setCategoriesLoading(true);
-      const timer = setTimeout(() => {
-        setCategoriesLoading(false);
-      }, 1500);
-      return () => clearTimeout(timer);
+    if (!currentUser) {
+      setMembersInLobby([]);
+      return;
     }
-  }, [currentScreen]);
 
-  const handleGetStartedOnboarding = () => {
-    if (!userName.trim()) return;
-    setUserHandle(`@${userName.toLowerCase().replace(/\s+/g, '_')}`);
-    setCurrentScreen('explore');
+    const baseline: User[] = [currentUser];
+    if (simFriendsEnabled) {
+      baseline.push(
+        { id: 'usr-sarah', phone_number: '054-999-1111', display_name: 'Sarah 🎬' },
+        { id: 'usr-alex', phone_number: '054-999-2222', display_name: 'Alex 🍕' },
+        { id: 'usr-david', phone_number: '054-999-3333', display_name: 'David 🎯' }
+      );
+    }
+    setMembersInLobby(baseline);
+  }, [currentUser, simFriendsEnabled]);
+
+  // Generate Confetti when reaching Match screen
+  useEffect(() => {
+    if (phoneScreen === 'Match') {
+      const colors = ['#fbbf24', '#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#a78bfa', '#f43f5e'];
+      const pieces = Array.from({ length: 90 }).map((_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        y: -20 - Math.random() * 30,
+        size: 6 + Math.random() * 12,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        delay: Math.random() * 3,
+        duration: 3 + Math.random() * 4,
+      }));
+      setConfetti(pieces);
+    } else {
+      setConfetti([]);
+    }
+  }, [phoneScreen]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSwipeAction = (direction: 'like' | 'nope') => {
-    setSwipeActionMessage(direction);
-    
+  const handleCopyCode = (content: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedFileIndex(true);
+    showToast('Copied code reference to clipboard!');
+    setTimeout(() => setCopiedFileIndex(false), 2000);
+  };
+
+  // --- Onboarding Handlers ---
+  const [phoneNumberInput, setPhoneNumberInput] = useState<string>('');
+  const [displayNameInput, setDisplayNameInput] = useState<string>('');
+  const [registering, setRegistering] = useState<boolean>(false);
+
+  const executeMockRegister = () => {
+    if (!phoneNumberInput.trim() || !displayNameInput.trim()) {
+      showToast('Please fill out all fields on onboarding.');
+      return;
+    }
+    setRegistering(true);
     setTimeout(() => {
-      setSwipeActionMessage(null);
-      if (direction === 'like') {
-        // Trigger instant celebration screen mimicking perfect match agreement
-        setCurrentScreen('match');
-        setMatchesCount(prev => prev + 1);
-      } else {
-        if (currentCardIndex + 1 < swipeStack.length) {
-          setCurrentCardIndex(prev => prev + 1);
-        } else {
-          // Out of cards
-          setCurrentCardIndex(swipeStack.length);
-        }
-      }
-    }, 450);
+      const registerPayload = {
+        id: 'usr-' + Math.random().toString(36).substr(2, 9),
+        phone_number: phoneNumberInput,
+        display_name: displayNameInput,
+      };
+      setCurrentUser(registerPayload);
+      setUserToken('tkn_simulated_' + Math.random().toString(36).substr(2, 12));
+      setPhoneScreen('RoomCreate');
+      setRegistering(false);
+      showToast(`Welcome to ConsensuS, ${registerPayload.display_name}!`);
+    }, 850);
   };
 
-  const handleProfileSave = () => {
-    // Show saving feedback
-    const toast = document.getElementById('save-toast');
-    if (toast) {
-      toast.classList.remove('opacity-0');
-      setTimeout(() => toast.classList.add('opacity-0'), 2000);
+  // --- Room Create Handlers ---
+  const [createdMockRoom, setCreatedMockRoom] = useState<string | null>(null);
+  const [joiningRoomIdInput, setJoiningRoomIdInput] = useState<string>('');
+  const [loadingLobby, setLoadingLobby] = useState<boolean>(false);
+
+  const executeMockCreateRoom = () => {
+    setLoadingLobby(true);
+    setTimeout(() => {
+      const generatedId = 'room-' + Math.floor(100000 + Math.random() * 900000).toString();
+      setCreatedMockRoom(generatedId);
+      setCurrentRoomId(generatedId);
+      setLoadingLobby(false);
+      showToast('Created simulated room successfully!');
+    }, 700);
+  };
+
+  const executeMockJoinRoom = (targetId?: string) => {
+    const finalId = targetId || joiningRoomIdInput.trim();
+    if (!finalId) {
+      showToast('Enter a lobby code to join.');
+      return;
+    }
+    setLoadingLobby(true);
+    setTimeout(() => {
+      setCurrentRoomId(finalId);
+      setDeckSwipedCount(0);
+      setPhoneScreen('SwipeDeck');
+      setLoadingLobby(false);
+      showToast(`Simulated connection to room ${finalId}`);
+    }, 600);
+  };
+
+  // Copy lobby code inside simulated phone
+  const copyLobbyCodeInPhone = () => {
+    if (createdMockRoom) {
+      navigator.clipboard.writeText(createdMockRoom);
+      showToast('Lobby Invite code copied to physical clipboard!');
     }
   };
 
-  const handleLogOut = () => {
-    setUserName('Alex');
-    setUserHandle('@alex');
-    setPhoneNumber('(555) 012-3456');
-    setEmailAddress('alex@consensus.io');
-    setCurrentScreen('onboarding');
+  // --- Swiping Deck Handlers ---
+  const getActiveDeckOfLobby = (): ContentItem[] => {
+    if (lobbyCategory === 'RESTAURANTS') return MOCK_RESTAURANTS;
+    if (lobbyCategory === 'ACTIVITIES') return MOCK_ACTIVITIES;
+    return MOCK_MOVIES;
+  };
+
+  const activeContentList = getActiveDeckOfLobby();
+
+  // Handle Swipe Gesture Simulation
+  const handleLikeSwipe = () => {
+    if (deckSwipedCount >= activeContentList.length) return;
+    const currentItem = activeContentList[deckSwipedCount];
+    
+    // Check if Simulated Friends will match on this card!
+    // In "Auto-Vote Match" mode, they always swipe right on the 1st or 2nd item!
+    if (simFriendsEnabled && (deckSwipedCount === 0 || deckSwipedCount === 1)) {
+      setTimeout(() => {
+        setMatchedItemData({
+          id: currentItem.id,
+          title: currentItem.title,
+          image_url: currentItem.image_url,
+          action_link: lobbyCategory === 'MOVIES' ? 'https://netflix.com' : lobbyCategory === 'RESTAURANTS' ? 'https://opentable.com' : 'https://google.com'
+        });
+        setPhoneScreen('Match');
+        showToast(`🎉 Matches reached real-time: ${currentItem.title}!`);
+      }, 500);
+    } else {
+      setDeckSwipedCount(prev => prev + 1);
+    }
+  };
+
+  const handleNopeSwipe = () => {
+    if (deckSwipedCount >= activeContentList.length) return;
+    setDeckSwipedCount(prev => prev + 1);
+  };
+
+  // Force Trigger Match Screen (for designers to review)
+  const forceTriggerMockMatch = () => {
+    if (!currentUser) {
+      showToast('Please onboard first inside the phone simulation!');
+      return;
+    }
+    const currentItem = activeContentList[deckSwipedCount % activeContentList.length];
+    setMatchedItemData({
+      id: currentItem.id,
+      title: currentItem.title,
+      image_url: currentItem.image_url,
+      action_link: 'https://netflix.com'
+    });
+    setPhoneScreen('Match');
+  };
+
+  const resetAllAppSession = () => {
+    setUserToken(null);
+    setCurrentUser(null);
+    setCurrentRoomId(null);
+    setCreatedMockRoom(null);
+    setDeckSwipedCount(0);
+    setPhoneScreen('Onboarding');
+    setPhoneNumberInput('');
+    setDisplayNameInput('');
+  };
+
+  const resetLobbyOnly = () => {
+    setCreatedMockRoom(null);
+    setCurrentRoomId(null);
+    setDeckSwipedCount(0);
+    setPhoneScreen('RoomCreate');
   };
 
   return (
-    <div id="app-designer" className="min-h-screen bg-[#07070a] text-[#e4e1e9] font-sans antialiased overflow-x-hidden selection:bg-[#7c3aed]/30">
-      {/* Main Studio Banner Header */}
-      <header className="border-b border-[#1f1f35]/50 bg-[#0d0d1a]/80 backdrop-blur-md px-6 py-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center justify-center w-10 h-10 rounded-full bg-[#7c3aed] text-white font-extrabold text-sm shadow-md shadow-[#7c3aed]/30">CS</span>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                ConsensuS <span className="text-xs bg-[#7c3aed]/10 text-[#d2bbff] px-2 py-0.5 rounded-full border border-[#7c3aed]/20 font-medium">Design System Translator</span>
-              </h1>
-              <p className="text-xs text-[#958da1]">Perfect HTML/Tailwind to React Native Components Conversion Sandbox</p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-100 text-slate-900 antialiased select-none font-sans flex flex-col">
+      {/* Dynamic Keyframes for Confetti, Floats, and Animations */}
+      <style>{`
+        @keyframes floatConfetti {
+          0% {
+            transform: translateY(0) rotate(0deg) translateX(0);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(900px) rotate(360deg) translateX(50px);
+            opacity: 0.2;
+          }
+        }
+        .confetti-p {
+          animation: floatConfetti linear infinite;
+        }
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.15; transform: scale(1); filter: blur(30px); }
+          50% { opacity: 0.35; transform: scale(1.15); filter: blur(40px); }
+        }
+        .glow-halo {
+          animation: pulseGlow 4s ease-in-out infinite;
+        }
+      `}</style>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center bg-[#111118] border border-[#1f1f35] rounded-xl p-1 gap-1">
-              <span className="text-xs text-[#958da1] px-3 font-semibold">Active Screen:</span>
-              <button 
-                onClick={() => setCurrentScreen('onboarding')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  currentScreen === 'onboarding' ? 'bg-[#7c3aed] text-white shadow' : 'text-[#958da1] hover:text-[#e4e1e9]'
-                }`}
-              >
-                Onboarding
-              </button>
-              <button 
-                onClick={() => setCurrentScreen('explore')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  currentScreen === 'explore' ? 'bg-[#7c3aed] text-white shadow' : 'text-[#958da1] hover:text-[#e4e1e9]'
-                }`}
-              >
-                Explore / Categories
-              </button>
-              <button 
-                onClick={() => setCurrentScreen('swipe')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  currentScreen === 'swipe' ? 'bg-[#7c3aed] text-white shadow' : 'text-[#958da1] hover:text-[#e4e1e9]'
-                }`}
-              >
-                Swipe Deck
-              </button>
-              <button 
-                onClick={() => setCurrentScreen('match')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  currentScreen === 'match' ? 'bg-[#7c3aed] text-white shadow' : 'text-[#958da1] hover:text-[#e4e1e9]'
-                }`}
-              >
-                Celebration
-              </button>
-              <button 
-                onClick={() => {
-                  // Standardize Jordan D statistics as shown in Profile Screen Wireframe
-                  setUserName('Jordan D.');
-                  setUserHandle('@jordan_consensus');
-                  setPhoneNumber('+1 (555) 012-3456');
-                  setEmailAddress('jordan.d@example.com');
-                  setCurrentScreen('profile');
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  currentScreen === 'profile' ? 'bg-[#7c3aed] text-white shadow' : 'text-[#958da1] hover:text-[#e4e1e9]'
-                }`}
-              >
-                Profile
-              </button>
-            </div>
+      {/* HEADER BANNER */}
+      <header className="border-b border-slate-200 bg-white py-3 px-6 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="font-display font-bold text-xl tracking-tight text-slate-900 logo-text">
+              ConsensuS
+            </h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-0.5">
+              Tinder for groups — React Native Expo App
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs font-mono">
+          <div className="hidden lg:flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1 text-indigo-700 font-semibold">
+            <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
+            <span>Developer Sandbox Active</span>
+          </div>
+          <div className="text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-full font-bold">
+            UTC: <span className="text-slate-900 font-bold">2026-06-22</span>
           </div>
         </div>
       </header>
 
-      {/* Main Studio Body Workspace */}
-      <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* DYNAMIC TOAST */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border border-indigo-500/20 text-white px-4 py-2.5 rounded-full shadow-xl flex items-center gap-2.5 text-xs font-medium"
+          >
+            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MAIN LAYOUT SPLIT */}
+      <main className="flex-grow w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
         
-        {/* LEFT COLUMN: The Premium Smartphone Device Simulator */}
-        <section id="phone-simulation-view" className="lg:col-span-5 flex flex-col items-center">
-          <div className="text-center mb-4">
-            <h3 className="text-sm font-bold text-[#d2bbff] uppercase tracking-wider flex items-center justify-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></span>
-              Live Responsive Preview
+        {/* LEFT COLUMN: THE SIDEBAR AND SANDBOX STATUS PANEL (3 COLS) */}
+        <section className="lg:col-span-3 flex flex-col gap-6">
+          
+          {/* CONTROL RACK FOR PHONE */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+              <span>🎛️ Sandbox Controls</span>
+              <span className="text-[9px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Option Panel</span>
             </h3>
-            <p className="text-xs text-[#958da1]">Pure React Native-equivalent CSS execution</p>
-          </div>
-
-          {/* Interactive Bezel Box Container */}
-          <div className="relative w-[360px] h-[780px] bg-[#0c0c12] rounded-[44px] p-3 border-4 border-[#1f1f35] shadow-[0_12px_40px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden">
             
-            {/* Ambient Back Glow Inside Device */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[180%] h-[350px] bg-gradient-radial from-[#7c3aed]/10 to-transparent pointer-events-none z-0" />
+            <div className="flex flex-col gap-2 text-xs">
+              {/* Sim Friends */}
+              <button 
+                onClick={() => setSimFriendsEnabled(!simFriendsEnabled)}
+                className={`py-2.5 px-3 rounded-xl text-left border font-bold flex items-center justify-between transition ${
+                  simFriendsEnabled 
+                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700' 
+                    : 'border-slate-200 bg-slate-50 text-slate-400'
+                }`}
+              >
+                <span>Mock friends active</span>
+                <span className={`w-2 h-2 rounded-full ${simFriendsEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              </button>
 
-            {/* Smartphone Top Notch Sensor Area */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-40 h-5 bg-[#1f1f35] rounded-full z-50 flex items-center justify-between px-4">
-              <div className="w-2.5 h-2.5 rounded-full bg-black"></div>
-              <div className="w-12 h-1 bg-black/40 rounded-full"></div>
+              {/* Force Match */}
+              <button 
+                onClick={forceTriggerMockMatch}
+                disabled={phoneScreen === 'Onboarding'}
+                className="py-2.5 px-3 rounded-xl text-left border border-slate-200 bg-white hover:bg-slate-50 text-amber-600 font-bold flex items-center justify-between transition disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <span>Trigger Match Screen</span>
+                <span className="text-[10px]">✨</span>
+              </button>
             </div>
 
-            {/* Physical Screen Inset viewport */}
-            <div className="flex-1 rounded-[32px] overflow-hidden bg-[#131318] flex flex-col justify-between relative text-sm z-10 border border-[#1f1f35]/20">
-              
-              {/* SCREEN STAGE: Onboarding */}
-              {currentScreen === 'onboarding' && (
-                <div id="stage-onboarding" className="flex-1 flex flex-col justify-between p-6 pt-12 relative overflow-hidden transition-all">
-                  <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-radial from-[#7c3aed]/15 to-transparent pointer-events-none z-0" />
-                  
-                  <div className="flex-1 flex flex-col justify-center items-center relative z-10 text-center">
-                    <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-[#7c3aed]/10 border border-[#7c3aed]/20 mb-6">
-                      <span className="text-[10px] font-bold tracking-widest text-[#d2bbff]">EST. 2024</span>
-                    </div>
-                    <h1 className="text-[44px] font-extrabold tracking-tighter text-[#e4e1e9] leading-none mb-3">ConsensuS</h1>
-                    <p className="font-sans text-[#ccc3d8] text-sm max-w-[280px] leading-relaxed mx-auto">
-                      Collective decisions, made simple. Join the social pulse.
+            <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-100 pt-3 flex items-center gap-1.5">
+              <span className="text-indigo-600 font-bold">Mode:</span>
+              <span>Mock Friends vote with you and match instantly on swiping right!</span>
+            </div>
+          </div>
+
+          {/* DYNAMIC MEMBERS AND SOCIAL LOGS PANEL */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 flex-1 flex flex-col gap-4 shadow-sm min-h-[300px]">
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Lobby Progress & Members</p>
+            
+            {currentUser ? (
+              <div className="space-y-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="font-semibold text-xs text-slate-400 uppercase tracking-wider">Active Group</p>
+                    <p className="font-bold text-sm text-slate-800 mt-0.5">
+                      {currentRoomId ? `Lobby #${currentRoomId}` : 'Create or Join first!'}
                     </p>
-
-                    {/* Onboarding Input Stack */}
-                    <div className="w-full mt-10 space-y-4">
-                      {/* Form: Phone Number */}
-                      <div className="text-left">
-                        <label className="text-[10px] font-bold tracking-widest text-[#958da1] uppercase block mb-1.5 ml-1">Phone Number</label>
-                        <div className="flex items-center h-14 bg-[#111118]/80 border border-[#1f1f35] rounded-xl px-4 focus-within:border-[#7c3aed] transition-all">
-                          <span className="mr-3 text-[#7c3aed]">📞</span>
-                          <span className="font-semibold text-[#e4e1e9] mr-2">+1</span>
-                          <input 
-                            type="text" 
-                            className="bg-transparent border-none focus:outline-none w-full text-white placeholder-[#958da1]/50 text-sm font-semibold"
-                            placeholder="(555) 000-0000"
-                            value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Form: Display Name */}
-                      <div className="text-left">
-                        <label className="text-[10px] font-bold tracking-widest text-[#958da1] uppercase block mb-1.5 ml-1">Display Name</label>
-                        <div className="flex items-center h-14 bg-[#111118]/80 border border-[#1f1f35] rounded-xl px-4 focus-within:border-[#7c3aed] transition-all">
-                          <span className="mr-3 text-[#7c3aed]">👤</span>
-                          <input 
-                            type="text" 
-                            className="bg-transparent border-none focus:outline-none w-full text-white placeholder-[#958da1]/50 text-sm font-semibold"
-                            placeholder="Choose your handle"
-                            value={userName}
-                            onChange={(e) => setUserName(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Primary Continue button */}
-                      <button 
-                        onClick={handleGetStartedOnboarding}
-                        className="w-full h-14 mt-4 bg-[#7c3aed] text-[#ede0ff] rounded-full font-bold text-sm shadow-[0_8px_32px_rgba(124,58,237,0.35)] hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                      >
-                        Get Started
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <p className="text-center text-[11px] text-[#958da1] max-w-[2700px] mt-6 leading-relaxed px-4">
-                      By continuing, you agree to our <span className="text-[#d2bbff] font-bold">Terms of Service</span> and <span className="text-[#d2bbff] font-bold">Privacy Policy</span>.
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Category Selected: <strong className="text-indigo-600">{lobbyCategory}</strong>
                     </p>
                   </div>
 
-                  {/* Aesthetic Glowing Base Anchor */}
-                  <div className="w-full relative h-[64px] shrink-0">
-                    <div className="absolute bottom-0 left-0 w-full h-full opacity-40 blur-2xl pointer-events-none bg-gradient-to-t from-[#7c3aed] to-transparent"></div>
+                  {/* Voting Progress dynamically matching swiped indices */}
+                  <div className="mt-5 space-y-2">
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-semibold text-slate-600">Decision ConsensuS</span>
+                      <span className="text-xs font-bold text-indigo-600">
+                        {currentRoomId 
+                          ? `${Math.min(100, Math.round(((deckSwipedCount) / (activeContentList.length || 10)) * 100))}%`
+                          : '0%'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-indigo-600 h-full transition-all duration-300"
+                        style={{
+                          width: `${currentRoomId ? Math.min(100, Math.round(((deckSwipedCount) / (activeContentList.length || 10)) * 100)) : 0}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Member items */}
+                  <div className="mt-6 space-y-3.5">
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Lobby Seat Status</span>
+                    {membersInLobby.map((mbr) => {
+                      const isMe = mbr.id === currentUser.id;
+                      const hasVoted = deckSwipedCount >= activeContentList.length;
+                      return (
+                        <div key={mbr.id} className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                            isMe ? 'bg-indigo-100 text-indigo-700' : 'bg-pink-100 text-pink-700'
+                          }`}>
+                            {mbr.display_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              {mbr.display_name} {isMe && '(You)'}
+                            </p>
+                            <p className="text-[9px] font-medium leading-none mt-0.5">
+                              {hasVoted ? (
+                                <span className="text-emerald-500 font-bold">Finished Voting</span>
+                              ) : (
+                                <span className={isMe ? 'text-indigo-500 font-bold' : 'text-slate-400'}>
+                                  {isMe ? 'Voting now...' : 'Awaiting feedback'}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
 
-              {/* SCREEN STAGE: Explore / Categories */}
-              {currentScreen === 'explore' && (
-                <div id="stage-explore" className="flex-1 flex flex-col justify-between pt-14 pb-20 relative transition-all">
-                  
-                  {/* Fixed Header */}
-                  <header className="absolute top-0 left-0 w-full h-14 flex justify-between items-center px-4 bg-[#131318]/80 backdrop-blur-md border-b border-[#1f1f35]/30 z-20">
-                    <span className="font-bold text-sm text-[#e4e1e9]">Hi, {userName}!</span>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#1c1c24] border border-[#d2bbff]/20 overflow-hidden flex items-center justify-center">
-                        <img 
-                          className="w-full h-full object-cover" 
-                          src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=clamp&q=80&w=150" 
-                          alt="Avatar" 
+                {/* Session live status block */}
+                <div className="flex items-center gap-2.5 p-3 bg-indigo-50 text-indigo-700 rounded-xl mt-auto">
+                  <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-pulse" />
+                  <span className="text-[11px] font-bold tracking-wide uppercase">ConsensuS Stream Live</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-center items-center text-center p-4">
+                <span className="text-2xl opacity-60">👥</span>
+                <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                  Log in inside the virtual phone simulation to boot database lobbies and simulate real-time room sessions.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* CENTER COLUMN: THE PHONE SIMULATOR (4 COLS) */}
+        <section className="lg:col-span-4 flex flex-col items-center justify-start gap-4 relative py-2">
+          
+          {/* Floating Accent Elements */}
+          <div className="absolute left-[-24px] top-[180px] hidden xl:flex flex-col gap-4 pointer-events-none z-10">
+            <div className="w-12 h-12 bg-white rounded-2xl shadow-md border border-slate-150 flex items-center justify-center text-red-500 rotate-6 transition-all">
+              <span className="text-xl font-black">✕</span>
+            </div>
+          </div>
+          <div className="absolute right-[-24px] top-[290px] hidden xl:flex flex-col gap-4 pointer-events-none z-10">
+            <div className="w-12 h-12 bg-white rounded-2xl shadow-md border border-slate-150 flex items-center justify-center text-emerald-500 -rotate-12 transition-all">
+              <span className="text-xl font-black">✓</span>
+            </div>
+          </div>
+
+          <div id="virtual-phone-frame" className="relative w-[326px] h-[640px] bg-slate-950 rounded-[44px] p-3 shadow-2xl border-[8px] border-slate-900 flex flex-col justify-between overflow-hidden">
+            {/* PHONE TOP NOTCH/ISLAND */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-5 bg-slate-900 rounded-b-xl z-40 flex items-center justify-center">
+              <div className="w-12 h-1 bg-slate-700 rounded-full" />
+            </div>
+
+            {/* SCREEN BOUNDARY CONTAINER - CLEAN SLATE LIGHT BG */}
+            <div className="flex-1 w-full h-full bg-slate-50 rounded-[32px] overflow-hidden flex flex-col justify-between relative">
+              {/* MOBILE BAR STATUS */}
+              <div className="h-9 pt-2.5 px-6 flex items-center justify-between text-[11px] text-slate-800 font-bold z-40 absolute top-0 left-0 w-full bg-gradient-to-b from-slate-100 to-transparent">
+                <span>{currentPhoneTime}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px]">5G</span>
+                  <div className="w-5 h-2.5 rounded-sm border border-slate-800 p-0.5 flex items-center">
+                    <div className="w-3.5 h-full bg-slate-800 rounded-[1px]" />
+                  </div>
+                </div>
+              </div>
+
+              {/* SCREEN CONTENT AREA (SCROLL-CONTROLLED SECURE ROOT) */}
+              <div className="flex-1 w-full pt-10 pb-5 px-4 flex flex-col justify-between overflow-hidden">
+                
+                {/* 1. ONBOARDING SCREEN */}
+                {phoneScreen === 'Onboarding' && (
+                  <div className="flex-grow flex flex-col justify-center gap-5 mt-4">
+                    <div className="text-center pt-2">
+                      <h2 className="text-3xl font-display font-bold text-slate-900 tracking-tighter">ConsensuS</h2>
+                      <p className="text-[10px] text-indigo-600 font-bold tracking-widest uppercase mt-0.5">group decisions</p>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4.5 flex flex-col gap-3.5 mt-1 shadow-sm">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Phone number</label>
+                        <input 
+                          type="tel" 
+                          placeholder="e.g. 054-123-4567"
+                          value={phoneNumberInput}
+                          onChange={(e) => setPhoneNumberInput(e.target.value)}
+                          className="bg-slate-50 border border-slate-200 text-xs text-slate-800 p-2.5 rounded-xl focus:border-indigo-500 outline-none transition"
                         />
                       </div>
-                      <button onClick={() => setCurrentScreen('profile')} className="text-[#958da1] hover:text-[#d2bbff]">
-                        ⚙️
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Display name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. John Doe"
+                          value={displayNameInput}
+                          onChange={(e) => setDisplayNameInput(e.target.value)}
+                          className="bg-slate-50 border border-slate-200 text-xs text-slate-800 p-2.5 rounded-xl focus:border-indigo-500 outline-none transition"
+                        />
+                      </div>
+
+                      <button
+                        onClick={executeMockRegister}
+                        disabled={registering}
+                        className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-xs mt-1.5 shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-[0.98] transition"
+                      >
+                        {registering ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <span>Get Started</span>
+                        )}
                       </button>
                     </div>
-                  </header>
 
-                  <div className="flex-1 overflow-y-auto px-4 pt-14 pb-4 scroll-hide">
-                    {/* Hero Display Heading with simulated skeleton refetch tool */}
-                    <div className="mt-4 mb-5 flex justify-between items-end">
+                    <p className="text-[9px] text-center text-slate-400 px-3 leading-relaxed">
+                      Build instant lobbies for films, group dinners, or active sports/hangouts!
+                    </p>
+                  </div>
+                )}
+
+                {/* 2. ROOM CREATE HUB */}
+                {phoneScreen === 'RoomCreate' && currentUser && (
+                  <div className="flex-grow flex flex-col justify-between mt-2">
+                    {/* Top bar with initials */}
+                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
                       <div>
-                        <h1 className="text-4xl font-extrabold tracking-tighter text-[#d2bbff] leading-none mb-1">What are we<br/>deciding?</h1>
-                        <p className="text-xs text-[#958da1] font-semibold">Choose a category to start your room.</p>
+                        <span className="text-[9px] uppercase text-slate-400 font-bold">Welcome back,</span>
+                        <h4 className="text-xs font-bold text-slate-900 mt-0.5 leading-none">{currentUser.display_name}</h4>
                       </div>
                       <button 
-                        onClick={() => {
-                          setCategoriesLoading(true);
-                          setTimeout(() => setCategoriesLoading(false), 1200);
-                        }}
-                        className="text-xs bg-[#7c3aed]/10 text-[#d2bbff] border border-[#7c3aed]/20 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 hover:bg-[#7c3aed]/20 transition-all duration-300 active:scale-95 mb-1"
-                        title="Retry category retrieval with skeleton loader"
+                        onClick={() => setPhoneScreen('Profile')}
+                        className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs text-white border border-indigo-500 hover:scale-105 transition shadow-sm"
                       >
-                        <span className="text-[10px]">🔄</span> Refetch
+                        {currentUser.display_name.charAt(0).toUpperCase()}
                       </button>
                     </div>
 
-                    {/* Horizontal scrollable cards container / skeletons representing react-native-skeleton-content */}
-                    {categoriesLoading ? (
-                      <div className="flex gap-4 overflow-x-auto py-2 scroll-hide">
-                        {[1, 2, 3].map((idx) => (
-                          <div 
-                            key={idx}
-                            className="relative shrink-0 w-48 h-[280px] rounded-2xl overflow-hidden border border-[#1f1f35]/50 bg-[#111118]/80 p-4 flex flex-col justify-between animate-pulse"
-                          >
-                            {/* Top Selection/Indicator skeleton placeholder */}
-                            <div className="flex justify-end">
-                              <div className="w-8 h-8 rounded-full bg-[#1b1b26]/85 border border-[#1f1f35]/40 shadow-inner" />
-                            </div>
+                    {!createdMockRoom ? (
+                      <div className="flex-grow flex flex-col justify-center gap-3 py-2">
+                        <div className="flex flex-col">
+                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">1. Choose Category</h4>
+                          <span className="text-[10px] text-slate-500">Pick what you are matching together</span>
+                        </div>
 
-                            {/* Bottom Metadata skeleton lines */}
-                            <div className="space-y-2">
-                              {/* Department label skeleton */}
-                              <div className="w-16 h-3 bg-[#4edea3]/15 rounded-md" />
-                              {/* Title line 1 skeleton */}
-                              <div className="w-3/4 h-5 bg-[#1f1f2e] rounded-lg" />
-                              {/* Title line 2 skeleton */}
-                              <div className="w-1/2 h-3 bg-[#1b1b26] rounded-md" />
-                            </div>
-                          </div>
-                        ))}
+                        {/* 3 Categories list */}
+                        <div className="flex flex-col gap-2">
+                          {[
+                            { type: 'MOVIES' as const, icon: <Film className="w-4 h-4 text-pink-500" />, emoji: '🎬', label: 'Movies', desc: 'Pick films to watch close' },
+                            { type: 'RESTAURANTS' as const, icon: <Utensils className="w-4 h-4 text-orange-500" />, emoji: '🍕', label: 'Restaurants', desc: 'Decide where to grub' },
+                            { type: 'ACTIVITIES' as const, icon: <Compass className="w-4 h-4 text-cyan-500" />, emoji: '🎯', label: 'Activities', desc: 'Active sports & outings' }
+                          ].map((cat) => {
+                            const isSelected = lobbyCategory === cat.type;
+                            return (
+                              <button
+                                key={cat.type}
+                                onClick={() => setLobbyCategory(cat.type)}
+                                className={`p-2.5 rounded-xl text-left border flex items-center justify-between transition ${
+                                  isSelected 
+                                    ? 'border-indigo-600 bg-indigo-50/70 shadow-sm' 
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-lg">{cat.emoji}</span>
+                                  <div>
+                                    <span className="text-xs text-slate-900 font-bold block">{cat.label}</span>
+                                    <span className="text-[9px] text-slate-400 block mt-0.5 leading-none">{cat.desc}</span>
+                                  </div>
+                                </div>
+                                <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected ? 'border-indigo-600' : 'border-slate-300'}`}>
+                                  {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          onClick={executeMockCreateRoom}
+                          disabled={loadingLobby}
+                          className="bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 hover:bg-indigo-700 shadow-md shadow-indigo-600/10 transition mt-1"
+                        >
+                          {loadingLobby ? (
+                            <RefreshCw className="w-3 animate-spin text-white" />
+                          ) : (
+                            <span>Create Decisions Lobby</span>
+                          )}
+                        </button>
                       </div>
                     ) : (
-                      <div className="flex gap-4 overflow-x-auto py-2 scroll-hide">
-                        {CATEGORIES.map((item) => {
-                          const isSelected = selectedCategory === item.id;
-                          return (
-                            <div 
-                              key={item.id}
-                              onClick={() => setSelectedCategory(item.id)}
-                              className={`relative shrink-0 w-48 h-[280px] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${
-                                isSelected ? 'border-2 border-[#d2bbff] ring-4 ring-[#7c3aed]/10' : 'border border-[#1f1f35]'
-                              }`}
-                            >
-                              <img 
-                                src={item.image} 
-                                alt={item.title}
-                                className="absolute inset-0 w-full h-full object-cover"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-[#111118] via-[#111118]/25 to-transparent"></div>
+                      <div className="flex-grow flex flex-col justify-center gap-4 items-center py-4 text-center">
+                        <span className="text-3xl animate-bounce">🎬</span>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">Invite Code Generated</h4>
+                          <p className="text-[10px] text-slate-500 px-3 mt-1 leading-snug">Friends join from their screens with this lobby ID:</p>
+                        </div>
 
-                              {/* Selection check indicator */}
-                              {isSelected && (
-                                <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#d2bbff] flex items-center justify-center text-[#3f008e] font-extrabold shadow shadow-black">
-                                  <Check className="w-4 h-4" />
-                                </div>
-                              )}
+                        <div 
+                          onClick={copyLobbyCodeInPhone}
+                          className="bg-white border border-slate-200 px-3.5 py-2 rounded-xl w-full max-w-[210px] cursor-pointer hover:border-indigo-500 transition flex items-center justify-between gap-2 shadow-sm"
+                        >
+                          <span className="font-mono text-xs text-amber-600 tracking-wider font-bold">{createdMockRoom}</span>
+                          <Copy className="w-3 h-3 text-slate-400" />
+                        </div>
 
-                              <div className="absolute bottom-4 left-4 right-4">
-                                <span className="text-[9px] font-bold tracking-widest text-[#4edea3] uppercase block mb-1">{item.department}</span>
-                                <h3 className="text-lg font-bold text-white leading-tight">{item.emoji} {item.title}</h3>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        <div className="flex flex-col gap-2 w-full px-2">
+                          <button
+                            onClick={() => executeMockJoinRoom(createdMockRoom)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-xs font-bold shadow-sm"
+                          >
+                            Start Swiping Deck
+                          </button>
+                          <button
+                            onClick={() => setCreatedMockRoom(null)}
+                            className="text-slate-400 hover:text-slate-600 text-[9px] uppercase font-bold mt-1"
+                          >
+                            Reset Choice
+                          </button>
+                        </div>
                       </div>
                     )}
 
-                    {/* Launch Room Button */}
-                    <div className="mt-6">
-                      <button 
-                        onClick={() => setCurrentScreen('swipe')}
-                        className="w-full bg-[#7c3aed] py-4 rounded-full font-bold text-white text-xs flex items-center justify-center gap-2 neon-glow-primary hover:brightness-110 active:scale-[0.98] transition-all"
-                      >
-                        Create Room
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Gradient Fade Divider */}
-                    <div className="my-8 gradient-divider"></div>
-
-                    {/* Friend room sign and join form */}
-                    <div className="space-y-4">
-                      <div>
-                        <span className="text-[10px] font-bold tracking-widest text-[#958da1]">OR JOIN A FRIEND'S ROOM</span>
-                        <div className="relative flex items-center mt-2">
+                    {/* Divider JOIN logic */}
+                    {!createdMockRoom && (
+                      <div className="border-t border-slate-200 pt-3 mt-auto flex flex-col gap-1.5">
+                        <span className="text-[9px] uppercase text-slate-400 font-bold text-center">or join existing lobby</span>
+                        <div className="flex gap-1.5">
                           <input 
                             type="text" 
-                            className="w-full bg-[#1b1b20] border border-[#1f1f35] rounded-xl py-3.5 pl-4 pr-20 text-xs font-semibold text-white focus:outline-none focus:border-[#7c3aed] placeholder-[#958da1]/50"
-                            placeholder="Enter Room ID (e.g. #7721)"
-                            value={roomCode}
-                            onChange={(e) => setRoomCode(e.target.value)}
+                            placeholder="Lobby ID..."
+                            value={joiningRoomIdInput}
+                            onChange={(e) => setJoiningRoomIdInput(e.target.value)}
+                            className="flex-1 bg-white border border-slate-200 text-xs text-slate-800 p-2 rounded-lg outline-none focus:border-indigo-500"
                           />
-                          <button 
-                            onClick={() => setCurrentScreen('swipe')}
-                            className="absolute right-2 top-2 bottom-2 bg-[#2a292f] text-[#d2bbff] px-4 rounded-lg text-xs font-bold hover:brightness-110"
+                          <button
+                            onClick={() => executeMockJoinRoom()}
+                            className="bg-slate-800 text-white font-bold text-[11px] px-3.5 rounded-lg hover:bg-slate-900"
                           >
                             Join
                           </button>
                         </div>
                       </div>
-
-                      {/* Simple rejoin banner */}
-                      <div className="p-3.5 bg-[#171724]/75 rounded-xl border border-[#1f1f35] flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-[#4edea3]/10 flex items-center justify-center text-[#4edea3] text-xs">⏳</div>
-                          <span className="text-xs font-semibold text-white">Recent: "{recentRoomName}"</span>
-                        </div>
-                        <button 
-                          onClick={() => setCurrentScreen('swipe')} 
-                          className="text-[#d2bbff] text-xs font-bold hover:underline"
-                        >
-                          Rejoin
-                        </button>
-                      </div>
-                    </div>
+                    )}
                   </div>
+                )}
 
-                  {/* Navigation Bar */}
-                  <nav className="absolute bottom-0 left-0 w-full h-14 bg-[#111118]/90 backdrop-blur-md border-t border-[#1f1f35]/40 flex justify-around items-center px-4 z-20">
-                    <button onClick={() => setCurrentScreen('explore')} className="flex flex-col items-center justify-center text-[#d2bbff] bg-[#7c3aed]/10 px-3 py-1.5 rounded-full">
-                      <Compass className="w-4 h-4" />
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Explore</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('swipe')} className="flex flex-col items-center justify-[#958da1] text-[#958da1] hover:text-white transition">
-                      <span className="text-md">👥</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Rooms</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('match')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md">❤️</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Matches</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('profile')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md font-sans">👤</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Profile</span>
-                    </button>
-                  </nav>
-                </div>
-              )}
-
-              {/* SCREEN STAGE: Swipe Deck */}
-              {currentScreen === 'swipe' && (
-                <div id="stage-swipe-deck" className="flex-1 flex flex-col justify-between pt-14 pb-20 relative transition-all">
-                  
-                  {/* Header Navigation */}
-                  <header className="absolute top-0 left-0 w-full h-14 flex justify-between items-center px-4 bg-[#131318]/80 backdrop-blur-md border-b border-[#1f1f35]/30 z-20">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#7c3aed] flex items-center justify-center font-bold text-[9px] text-[#ede0ff]">UP</div>
-                      <span className="font-extrabold text-[#d2bbff] tracking-tight text-sm">ConsensuS</span>
-                    </div>
-                    <button onClick={() => setCurrentScreen('profile')} className="text-[#958da1] hover:text-[#d2bbff]">
-                      ⚙️
-                    </button>
-                  </header>
-
-                  {/* Active swiper workspace */}
-                  <div className="flex-grow flex flex-col items-center justify-center py-4 relative">
-                    
-                    {/* Swipe counters */}
-                    <div className="mb-4 text-center">
-                      <div className="flex -space-x-1.5 justify-center">
-                        <img className="w-8 h-8 rounded-full border-2 border-[#131318] object-cover" src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100" alt="f1" />
-                        <img className="w-8 h-8 rounded-full border-2 border-[#131318] object-cover" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=100" alt="f2" />
-                        <img className="w-8 h-8 rounded-full border-2 border-[#131318] object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100" alt="f3" />
-                        <div className="w-8 h-8 rounded-full border-2 border-[#131318] bg-[#1f1f25] flex items-center justify-center text-[9px] font-bold text-[#d2bbff]">+2</div>
+                {/* 3. SWIPE DECK SCREEN */}
+                {phoneScreen === 'SwipeDeck' && currentUser && (
+                  <div className="flex-grow flex flex-col justify-between mt-2 h-full">
+                    {/* Header bar */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase block">Matching Lobby</span>
+                        <h4 className="text-[11px] font-mono font-bold text-indigo-600 mt-0.5">
+                          #{currentRoomId?.slice(0, 8)}
+                        </h4>
                       </div>
-                      <span className="text-[9px] font-bold tracking-widest text-[#958da1] uppercase block mt-2">4 Friends Swiping ({selectedCategory})</span>
-                    </div>
 
-                    <div className="w-[85%] h-1 bg-[#1f1f35]/50 rounded-full mb-4"></div>
-
-                    {/* The Card View Area */}
-                    <div className="w-[280px] h-[360px] relative">
-                      <AnimatePresence mode="popLayout">
-                        {currentCardIndex >= swipeStack.length ? (
-                          <motion.div 
-                            key="empty"
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1, transition: { type: 'spring', damping: 20, stiffness: 120 } }}
-                            className="absolute inset-0 bg-[#111118] border border-[#1f1f35] rounded-3xl p-6 flex flex-col items-center justify-center text-center"
-                          >
-                            <div className="w-16 h-16 rounded-full bg-[#7c3aed]/10 text-[#d2bbff] flex items-center justify-center text-3xl mb-4 animate-bounce">🎬</div>
-                            <h2 className="text-md font-bold text-[#d2bbff] mb-2">You've seen everything!</h2>
-                            <p className="text-xs text-[#958da1]">Waiting for other friends to finalize. We will match soon!</p>
-                            <button 
-                              onClick={() => setCurrentCardIndex(0)}
-                              className="mt-6 px-4 py-2 bg-[#2a292f] hover:bg-[#35343a] text-xs font-bold text-[#d2bbff] rounded-lg flex items-center gap-1.5 transition-all"
+                      {/* Active Member badges */}
+                      <div className="flex items-center gap-1">
+                        <div className="flex -space-x-1.5">
+                          {membersInLobby.map((mbr) => (
+                            <div 
+                              key={mbr.id} 
+                              title={mbr.display_name}
+                              className="w-5 h-5 rounded-full bg-indigo-600 border border-slate-50 flex items-center justify-center text-[9px] font-bold text-white uppercase shadow-sm"
                             >
-                              <RotateCcw className="w-3 h-3" />
-                              Restart Stack
-                            </button>
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key={swipeStack[currentCardIndex].id}
-                            initial={{ scale: 0.92, y: 15, opacity: 0.85 }}
-                            animate={{ scale: 1, y: 0, opacity: 1 }}
-                            exit={{
-                              x: swipeActionMessage === 'like' ? 320 : swipeActionMessage === 'nope' ? -320 : 0,
-                              y: 20,
-                              opacity: 0,
-                              rotate: swipeActionMessage === 'like' ? 15 : swipeActionMessage === 'nope' ? -15 : 0,
-                              transition: { type: 'spring', damping: 25, stiffness: 150 }
-                            }}
-                            transition={{ type: 'spring', damping: 20, stiffness: 150 }}
-                            drag="x"
-                            dragConstraints={{ left: 0, right: 0 }}
-                            onDragEnd={(event, info) => {
-                              if (info.offset.x > 100) {
-                                handleSwipeAction('like');
-                              } else if (info.offset.x < -100) {
-                                handleSwipeAction('nope');
-                              }
-                            }}
-                            className="absolute inset-0 bg-[#111118] rounded-3xl border border-[#1f1f35] overflow-hidden shadow-2xl flex flex-col justify-between transition-all duration-300 cursor-grab active:cursor-grabbing select-none"
-                          >
-                            
-                            {/* Top Card Image Body content */}
-                            <div className="h-[60%] relative overflow-hidden bg-black pointer-events-none">
-                              <img 
-                                src={swipeStack[currentCardIndex].image} 
-                                alt="Movie Poster" 
-                                className="w-full h-full object-cover"
-                              />
-                              
-                              {/* Overlay Indicators matching swipe action message */}
-                              {swipeActionMessage === 'like' && (
-                                <div className="absolute top-6 left-6 border-4 border-[#4edea3] px-4 py-1 rounded-lg text-[#4edea3] font-black text-2xl tracking-widest rotate-[-12deg] bg-[#111118]/90 z-20">
-                                  LIKE
-                                </div>
-                              )}
-
-                              {swipeActionMessage === 'nope' && (
-                                <div className="absolute top-6 right-6 border-4 border-[#ef4444] px-4 py-1 rounded-lg text-[#ef4444] font-black text-2xl tracking-widest rotate-[12deg] bg-[#111118]/90 z-20">
-                                  NOPE
-                                </div>
-                              )}
+                              {mbr.display_name.charAt(0)}
                             </div>
-
-                            {/* Detail metadata stack bottom */}
-                            <div className="h-[40%] bg-[#1b1b20] p-4 flex flex-col justify-between pointer-events-none">
-                              <div>
-                                <div className="flex justify-between items-center">
-                                  <h3 className="text-md font-extrabold text-white truncate leading-none">
-                                    {swipeStack[currentCardIndex].title}
-                                  </h3>
-                                  {swipeStack[currentCardIndex].badge && (
-                                    <span className="text-[8px] font-bold tracking-wide uppercase px-2 py-0.5 rounded bg-[#4edea3]/10 text-[#4edea3] border border-[#4edea3]/25">
-                                      Joined
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-[#958da1] mt-1 truncate">
-                                  {swipeStack[currentCardIndex].meta}
-                                </p>
-                              </div>
-
-                              {/* Tags list */}
-                              <div className="flex flex-wrap gap-1.5">
-                                {swipeStack[currentCardIndex].tags.map((tag, i) => (
-                                  <span key={i} className="text-[10px] font-semibold text-[#e4e1e9] bg-[#2a292f] px-2.5 py-1 rounded-full border border-[#1f1f35]/40">{tag}</span>
-                                ))}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          ))}
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-bold ml-1">{membersInLobby.length} active</span>
+                      </div>
                     </div>
 
-                    {/* Physics swiper action controllers */}
-                    {currentCardIndex < swipeStack.length && (
-                      <div className="flex gap-8 justify-center items-center mt-6">
+                    {/* Active swiper cards list */}
+                    <div className="flex-grow my-3 flex flex-col justify-center items-center relative min-h-[300px]">
+                      {deckSwipedCount < activeContentList.length ? (
+                        <AnimatePresence mode="popLayout">
+                          {activeContentList.map((card, idx) => {
+                            if (idx !== deckSwipedCount) return null;
+                            return (
+                              <motion.div
+                                key={card.id}
+                                initial={{ scale: 0.95, y: 15, opacity: 0 }}
+                                animate={{ scale: 1, y: 0, opacity: 1 }}
+                                exit={{ scale: 0.9, y: -20, opacity: 0 }}
+                                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                                className="w-full max-w-[250px] aspect-[3/4] bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-md flex flex-col relative"
+                              >
+                                <img 
+                                  src={card.image_url} 
+                                  alt={card.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-[58%] object-cover block"
+                                />
+                                <div className="p-3.5 flex-1 flex flex-col justify-between">
+                                  <div>
+                                    <h5 className="font-extrabold text-xs text-slate-900 tracking-tight leading-snug line-clamp-2">
+                                      {card.title}
+                                    </h5>
+                                    
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {card.meta_data.year && (
+                                        <span className="bg-indigo-50 text-indigo-700 text-[8px] font-bold px-1.5 py-0.5 rounded">
+                                          {card.meta_data.year}
+                                        </span>
+                                      )}
+                                      {card.meta_data.cuisine && (
+                                        <span className="bg-slate-100 text-slate-600 text-[8px] font-bold px-1.5 py-0.5 rounded">
+                                          {card.meta_data.cuisine}
+                                        </span>
+                                      )}
+                                      {card.meta_data.rating && (
+                                        <span className="bg-amber-50 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded">
+                                          ★ {card.meta_data.rating}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-[8px] text-slate-400 italic">
+                                    Swipe or tap direct feedback buttons
+                                  </div>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </AnimatePresence>
+                      ) : (
+                        <div className="text-center px-4">
+                          <span className="text-3xl animate-bounce block">💤</span>
+                          <h5 className="text-xs font-bold text-slate-900 mt-2">All options swiped!</h5>
+                          <p className="text-[9px] text-slate-400 mt-1 leading-snug">
+                            Waiting for other lobby friends to match. Instantly start a new room selection!
+                          </p>
+                          <button
+                            onClick={resetLobbyOnly}
+                            className="bg-slate-800 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg mt-3 shadow-sm hover:bg-slate-900 transition"
+                          >
+                            Exit Deck
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Like / Nope Buttons */}
+                    {deckSwipedCount < activeContentList.length && (
+                      <div className="flex gap-3.5 items-center justify-center pb-1">
                         <button 
-                          onClick={() => handleSwipeAction('nope')}
-                          className="w-14 h-14 rounded-full bg-[#111118] border border-[#ef4444]/40 text-[#ef4444] flex items-center justify-center hover:bg-[#ef4444]/10 transition active:scale-90 neon-glow-error"
+                          onClick={handleNopeSwipe}
+                          className="w-11 h-11 rounded-full bg-white border border-red-200 shadow-md flex items-center justify-center hover:bg-red-50 active:scale-95 transition text-red-500 font-extrabold"
                         >
-                          <X className="w-6 h-6" />
+                          <X className="w-5 h-5" />
                         </button>
                         <button 
-                          onClick={() => handleSwipeAction('like')}
-                          className="w-14 h-14 rounded-full bg-[#111118] border border-[#4edea3] text-[#4edea3] flex items-center justify-center hover:bg-[#4edea3]/10 transition active:scale-90 neon-glow-secondary"
+                          onClick={handleLikeSwipe}
+                          className="w-11 h-11 rounded-full bg-indigo-600 border border-indigo-500 shadow-md flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition text-white font-extrabold"
                         >
-                          <Heart className="w-6 h-6 fill-current" />
+                          <Heart className="w-4 h-4 fill-white text-white" />
                         </button>
                       </div>
                     )}
                   </div>
+                )}
 
-                  {/* Navigation Bar */}
-                  <nav className="absolute bottom-0 left-0 w-full h-14 bg-[#111118]/90 backdrop-blur-md border-t border-[#1f1f35]/40 flex justify-around items-center px-4 z-20">
-                    <button onClick={() => setCurrentScreen('explore')} className="flex flex-col items-center justify-center text-[#958da1] hover:text-white transition">
-                      <Compass className="w-4 h-4" />
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Explore</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('swipe')} className="flex flex-col items-center justify-center text-[#d2bbff] bg-[#7c3aed]/10 px-3 py-1.5 rounded-full">
-                      <span className="text-md">👥</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Rooms</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('match')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md">❤️</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Matches</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('profile')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md font-sans">👤</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Profile</span>
-                    </button>
-                  </nav>
-                </div>
-              )}
-
-              {/* SCREEN STAGE: Match Celebration */}
-              {currentScreen === 'match' && (
-                <div id="stage-match" className="flex-1 flex flex-col justify-between pt-14 pb-20 relative overflow-hidden transition-all text-center">
-                  
-                  {/* Celebration Background Glow blur */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[160%] h-[60%] bg-[#fbbf24]/5 blur-3xl rounded-full pointer-events-none z-0" />
-
-                  {/* Absolute Headers */}
-                  <header className="absolute top-0 left-0 w-full h-14 flex justify-between items-center px-4 bg-[#131318]/80 backdrop-blur-md border-b border-[#1f1f35]/30 z-20">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#7c3aed] flex items-center justify-center font-bold text-[9px] text-[#ede0ff]">JD</div>
-                      <span className="font-extrabold text-[#d2bbff] tracking-tight text-sm">ConsensuS</span>
-                    </div>
-                    <button onClick={() => setCurrentScreen('profile')} className="text-[#958da1] hover:text-[#d2bbff]">
-                      ⚙️
-                    </button>
-                  </header>
-
-                  {/* Body celebration content */}
-                  <div className="flex-grow overflow-y-auto px-4 pt-14 pb-4 flex flex-col justify-between items-center relative z-10 scroll-hide">
+                {/* 4. MATCH CELEBRATION SCREEN */}
+                {phoneScreen === 'Match' && matchedItemData && (
+                  <div className="flex-grow flex flex-col justify-between items-center text-center mt-3 relative h-full">
                     
-                    {/* Celebration Header block */}
-                    <div className="mt-4 mb-4 animate-bounce">
-                      <span className="text-[10px] font-bold tracking-widest text-[#fbbf24] uppercase block mb-1">Match Achieved</span>
-                      <h1 className="text-3xl font-black text-white leading-tight">🎉 It's a Match!</h1>
+                    {/* CONFETTI LAYER */}
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[32px] z-10">
+                      {confetti.map((c) => (
+                        <div 
+                          key={c.id}
+                          className="confetti-p absolute w-2 h-2 rounded-full"
+                          style={{
+                            left: `${c.x}%`,
+                            top: `${c.y}px`,
+                            width: `${c.size}px`,
+                            height: `${c.size}px`,
+                            backgroundColor: c.color,
+                            animationDelay: `${c.delay}s`,
+                            animationDuration: `${c.duration}s`,
+                          }}
+                        />
+                      ))}
                     </div>
 
-                    {/* Matched Poster Card wrapper */}
-                    <div className="relative w-[240px] h-[340px] rounded-3xl overflow-hidden border border-[#1f1f35] neon-glow-gold bg-[#111118]/90 celebration-float-animation">
-                      <img 
-                        src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=400" 
-                        alt="Match Poster" 
-                        className="w-full h-2/3 object-cover"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#111118] via-[#111118]/90 to-transparent"></div>
-
-                      <span className="absolute top-3 right-3 text-[9px] font-bold text-[#261a00] bg-[#fbbf24] px-2.5 py-1 rounded-full shadow-md shadow-black/50">
-                        100% COMPATIBLE
+                    <div className="z-20 mt-2">
+                      <span className="text-[9px] uppercase font-bold text-amber-600 tracking-widest block leading-none">
+                        🎉 Consensus Reached 🎉
                       </span>
-
-                      <div className="absolute bottom-4 left-4 right-4 text-center">
-                        <h2 className="text-xl font-black text-white mb-1">Interstellar</h2>
-                        <p className="text-[11px] text-[#958da1] font-semibold leading-relaxed">You all agreed on this choice</p>
-                        
-                        <div className="flex -space-x-1.5 justify-center mt-3">
-                          <div className="w-6 h-6 rounded-full border-2 border-[#111118] bg-[#7c3aed] flex items-center justify-center font-bold text-[8px] text-white">JD</div>
-                          <div className="w-6 h-6 rounded-full border-2 border-[#111118] bg-[#00a572] flex items-center justify-center font-bold text-[8px] text-white">MS</div>
-                          <div className="w-6 h-6 rounded-full border-2 border-[#111118] bg-[#836100] flex items-center justify-center font-bold text-[8px] text-white">AK</div>
-                        </div>
-                      </div>
+                      <h4 className="text-lg font-bold font-display text-slate-900 tracking-tight mt-1 leading-none">
+                        It's a Match!
+                      </h4>
                     </div>
 
-                    {/* Action buttons list */}
-                    <div className="w-full space-y-2 mt-6">
-                      <button 
-                        onClick={() => alert("Launching Interstellar streaming player integration!")}
-                        className="w-full h-11 bg-[#fbbf24] text-[#261a00] rounded-full font-bold text-xs shadow-[0_4px_16px_rgba(251,191,36,0.3)] hover:brightness-110 active:scale-[0.98] transition-all"
-                      >
-                        Watch Now
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setSelectedCategory('movies');
-                          setCurrentScreen('explore');
-                        }}
-                        className="w-full h-11 rounded-full border border-[#fbbf24]/50 text-[#fbbf24] font-bold text-xs hover:bg-[#fbbf24]/5 active:scale-[0.98] transition-all"
+                    {/* Artwork Container */}
+                    <div className="relative w-36 h-36 flex items-center justify-center my-3 z-20">
+                      <div className="absolute w-40 h-40 rounded-full bg-amber-100 glow-halo flex items-center justify-center" />
+                      <img 
+                        src={matchedItemData.image_url} 
+                        alt={matchedItemData.title}
+                        referrerPolicy="no-referrer"
+                        className="w-28 h-28 rounded-full border-4 border-amber-400 object-cover shadow-lg relative"
+                      />
+                    </div>
+
+                    <div className="z-20 max-w-[220px]">
+                      <h5 className="font-extrabold text-indigo-700 text-xs tracking-tight line-clamp-1 leading-tight">
+                        {matchedItemData.title}
+                      </h5>
+                      <p className="text-[9px] text-slate-500 px-2 mt-1 leading-snug">
+                        All decision-makers are locked in on this choice!
+                      </p>
+                    </div>
+
+                    <div className="w-full flex flex-col gap-1.5 pt-2 z-20">
+                      {matchedItemData.action_link && (
+                        <a 
+                          href={matchedItemData.action_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-sm transition"
+                        >
+                          <span>Explore Details</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      
+                      <button
+                        onClick={resetLobbyOnly}
+                        className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 rounded-lg text-xs font-bold transition shadow-sm"
                       >
                         Start New Room
                       </button>
-                      <button 
-                        onClick={() => alert("Copied Match Details to share clipboard!")}
-                        className="w-full text-[11px] text-[#958da1] font-semibold hover:text-[#fbbf24]"
-                      >
-                        Share with Group
-                      </button>
                     </div>
                   </div>
+                )}
 
-                  {/* Navigation Bar */}
-                  <nav className="absolute bottom-0 left-0 w-full h-14 bg-[#111118]/90 backdrop-blur-md border-t border-[#1f1f35]/40 flex justify-around items-center px-4 z-20">
-                    <button onClick={() => setCurrentScreen('explore')} className="flex flex-col items-center justify-center text-[#958da1] hover:text-white transition">
-                      <Compass className="w-4 h-4" />
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Explore</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('swipe')} className="flex flex-col items-center justify-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md">👥</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Rooms</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('match')} className="flex flex-col items-center justify-center text-[#fbbf24] bg-[#fbbf24]/10 px-3 py-1.5 rounded-full">
-                      <span className="text-md text-[#fbbf24]">❤️</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Matches</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('profile')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md font-sans">👤</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Profile</span>
-                    </button>
-                  </nav>
-                </div>
-              )}
-
-              {/* SCREEN STAGE: Profile Settings */}
-              {currentScreen === 'profile' && (
-                <div id="stage-profile" className="flex-1 flex flex-col justify-between pt-14 pb-20 relative transition-all">
-                  
-                  {/* Header bar controls */}
-                  <header className="absolute top-0 left-0 w-full h-14 flex justify-between items-center px-4 bg-[#131318]/80 backdrop-blur-md border-b border-[#1f1f35]/30 z-20">
-                    <div className="flex items-center gap-1">
+                {/* 5. PROFILE SCREEN */}
+                {phoneScreen === 'Profile' && currentUser && (
+                  <div className="flex-grow flex flex-col justify-between mt-2 pt-1">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
                       <button 
-                        onClick={() => setCurrentScreen('explore')} 
-                        className="text-[#958da1] hover:text-[#d2bbff] p-1 font-bold mr-1"
+                        onClick={() => setPhoneScreen('RoomCreate')}
+                        className="text-slate-400 hover:text-slate-800 transition"
                       >
-                        ✕
+                        <ChevronLeft className="w-5 h-5" />
                       </button>
-                      <h1 className="font-bold text-sm text-[#e4e1e9]">Profile</h1>
-                    </div>
-                    <button onClick={() => alert("General settings triggers...")} className="text-[#958da1] hover:text-[#d2bbff]">
-                      ⚙️
-                    </button>
-                  </header>
-
-                  {/* Profile contents viewport */}
-                  <div className="flex-grow overflow-y-auto px-4 pt-14 pb-4 z-10 scroll-hide">
-                    
-                    {/* Saving floating feedback toast inside mockup */}
-                    <div id="save-toast" className="absolute top-16 left-1/2 -translate-x-1/2 bg-[#4edea3]/20 text-[#4edea3] border border-[#4edea3]/40 px-4 py-2 rounded-xl text-xs font-semibold opacity-0 transition-opacity duration-300 z-30 pointer-events-none flex items-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Saved Successfully
+                      <span className="text-xs font-bold text-slate-900">Member Settings</span>
                     </div>
 
-                    {/* Avatar with dynamic reactive initials */}
-                    <div className="flex flex-col items-center mt-6">
-                      <div className="relative">
-                        <div className="w-24 h-24 rounded-full avatar-gradient shadow-xl flex items-center justify-center text-white text-3xl font-extrabold relative z-10">
-                          {userName.substring(0, 2).toUpperCase() || 'JD'}
+                    <div className="flex-grow flex flex-col justify-center gap-3 py-3">
+                      {/* Avatar initials BIG */}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xl text-white border-2 border-slate-100 shadow-md">
+                          {currentUser.display_name.charAt(0).toUpperCase()}
                         </div>
-                        <button className="absolute -bottom-1 -right-1 z-20 bg-[#d2bbff] p-2 rounded-full border-4 border-[#0a0a0f] text-[#3f008e] active:scale-95 hover:brightness-110 transition">
-                          ✏️
-                        </button>
-                        <div className="absolute inset-0 bg-[#7c3aed]/20 blur-2xl -z-0 rounded-full"></div>
+                        <span className="text-[10px] text-indigo-600 uppercase font-black tracking-widest mt-0.5">ConsensuS Member</span>
                       </div>
 
-                      <div className="text-center mt-4">
-                        <h2 className="text-xl font-bold text-white">{userName}</h2>
-                        <p className="text-xs text-[#958da1] mt-0.5">{userHandle}</p>
-                      </div>
-                    </div>
-
-                    {/* Details input stack */}
-                    <div className="mt-8 space-y-4">
-                      {/* Name input */}
-                      <div>
-                        <label className="text-[10px] font-bold text-[#958da1] uppercase block mb-1 tracking-widest ml-1">Display Name</label>
-                        <div className="flex items-center h-12 bg-[#171724]/75 rounded-xl px-4 border border-[#1f1f35] focus-within:border-[#7c3aed] transition">
-                          <span className="text-[#958da1] text-sm mr-3">👤</span>
+                      {/* Display name form */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col gap-2.5 shadow-sm">
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Number (Static)</label>
                           <input 
                             type="text" 
-                            className="bg-transparent border-none focus:outline-none w-full text-white text-xs font-semibold"
-                            value={userName}
-                            onChange={(e) => {
-                              setUserName(e.target.value);
-                              setUserHandle(`@${e.target.value.toLowerCase().replace(/\s+/g, '_')}`);
-                            }}
+                            value={currentUser.phone_number} 
+                            disabled 
+                            className="bg-slate-50 border border-slate-200 text-xs text-slate-400 p-2 rounded-lg outline-none cursor-not-allowed"
                           />
                         </div>
-                      </div>
 
-                      {/* Phone input (marked read-only verified) */}
-                      <div>
-                        <label className="text-[10px] font-bold text-[#958da1] uppercase block mb-1 tracking-widest ml-1">Verified Phone</label>
-                        <div className="flex items-center h-12 bg-[#1b1b20] rounded-xl px-4 border border-border-subtle/10 opacity-75">
-                          <span className="text-[#958da1] text-xs mr-3">📞</span>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Display name</label>
                           <input 
                             type="text" 
-                            className="bg-transparent border-none text-[#958da1] text-xs font-semibold w-full outline-none cursor-not-allowed"
-                            value={phoneNumber}
-                            readOnly
-                          />
-                          <span className="text-[#4edea3] text-xs font-bold">✓</span>
-                        </div>
-                      </div>
-
-                      {/* Email input */}
-                      <div>
-                        <label className="text-[10px] font-bold text-[#958da1] uppercase block mb-1 tracking-widest ml-1">Email Address</label>
-                        <div className="flex items-center h-12 bg-[#171724]/75 rounded-xl px-4 border border-[#1f1f35] focus-within:border-[#7c3aed] transition">
-                          <span className="text-[#958da1] text-sm mr-3">✉️</span>
-                          <input 
-                            type="email" 
-                            className="bg-transparent border-none focus:outline-none w-full text-white text-xs font-semibold"
-                            value={emailAddress}
-                            onChange={(e) => setEmailAddress(e.target.value)}
+                            value={currentUser.display_name} 
+                            onChange={(e) => setCurrentUser({...currentUser, display_name: e.target.value})}
+                            className="bg-white border border-slate-200 text-xs text-slate-800 p-2 rounded-lg focus:border-indigo-500 outline-none transition"
                           />
                         </div>
                       </div>
-                    </div>
 
-                    {/* Stats columns */}
-                    <div className="grid grid-cols-3 gap-3 mt-8 mb-6">
-                      <div className="p-3 bg-[#111118]/80 border border-[#1f1f35] rounded-xl text-center">
-                        <span className="text-md font-bold text-[#d2bbff] block">{roomsCount}</span>
-                        <span className="text-[8px] font-bold text-[#958da1] block tracking-wider uppercase mt-1">Rooms</span>
-                      </div>
-                      <div className="p-3 bg-[#111118]/80 border border-[#1f1f35] rounded-xl text-center">
-                        <span className="text-md font-bold text-[#4edea3] block">{matchesCount}</span>
-                        <span className="text-[8px] font-bold text-[#958da1] block tracking-wider uppercase mt-1">Matches</span>
-                      </div>
-                      <div className="p-3 bg-[#111118]/80 border border-[#1f1f35] rounded-xl text-center">
-                        <span className="text-md font-bold text-[#fbbf24] block">92%</span>
-                        <span className="text-[8px] font-bold text-[#958da1] block tracking-wider uppercase mt-1">Agree</span>
-                      </div>
-                    </div>
-
-                    {/* Primary profiles CTA buttons */}
-                    <div className="space-y-3 mt-6">
-                      <button 
-                        onClick={handleProfileSave}
-                        className="w-full h-12 bg-[#7c3aed] text-[#ede0ff] rounded-full font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#7c3aed]/20"
+                      <button
+                        onClick={resetAllAppSession}
+                        className="w-full bg-red-50 border border-red-200 text-red-600 text-xs font-bold py-2 rounded-xl hover:bg-red-100/40 active:scale-98 transition flex items-center justify-center gap-1.5 transition"
                       >
-                        <Save className="w-4 h-4" />
-                        Save Changes
-                      </button>
-                      <button 
-                        onClick={handleLogOut}
-                        className="w-full h-12 bg-transparent border border-[#ef4444]/30 text-[#ef4444] rounded-full font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#ef4444]/5 transition-all"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Log Out
+                        <LogOut className="w-3.5 h-3.5 block" />
+                        <span>Log Out Sessions</span>
                       </button>
                     </div>
 
-                    <p className="text-center text-[10px] text-[#958da1] mt-8 tracking-widest font-mono">CONSENSU_S V2.4.0</p>
+                    <p className="text-[9px] text-center text-slate-400 leading-tight">
+                      Session and active database credentials stored locally in this sandbox tab.
+                    </p>
                   </div>
+                )}
 
-                  {/* Navigation Bar */}
-                  <nav className="absolute bottom-0 left-0 w-full h-14 bg-[#111118]/90 backdrop-blur-md border-t border-[#1f1f35]/40 flex justify-around items-center px-4 z-20">
-                    <button onClick={() => setCurrentScreen('explore')} className="flex flex-col items-center justify-center text-[#958da1] hover:text-white transition">
-                      <Compass className="w-4 h-4" />
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Explore</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('swipe')} className="flex flex-col items-center justify-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md">👥</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Rooms</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('match')} className="flex flex-col items-center text-[#958da1] hover:text-white transition">
-                      <span className="text-md">❤️</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Matches</span>
-                    </button>
-                    <button onClick={() => setCurrentScreen('profile')} className="flex flex-col items-center justify-center text-[#d2bbff] bg-[#7c3aed]/10 px-3 py-1.5 rounded-full">
-                      <span className="text-md font-sans">👤</span>
-                      <span className="text-[8px] font-bold uppercase tracking-widest mt-1">Profile</span>
-                    </button>
-                  </nav>
-                </div>
+              </div>
+            </div>
+
+            {/* PHONE BOTTOM NAV BAR */}
+            <div className="absolute bottom-1 right-1/2 translate-x-1/2 w-28 h-1 bg-slate-400 rounded-full z-40" />
+          </div>
+        </section>
+
+        {/* RIGHT COLUMN: CODE VIEWER & EXPLORER (5 COLS) */}
+        <section className="lg:col-span-5 flex flex-col bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+          
+          {/* RIGHT COL BAR DECORATOR AND SELECTORS */}
+          <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Laptop className="w-4 h-4 text-indigo-600" />
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                <span>📂 Expo mobile app Frontend codebase</span>
+                <span className="bg-indigo-50 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">11 complete files</span>
+              </h2>
+            </div>
+            
+            <button
+              onClick={() => handleCopyCode(selectedCodeFile.content)}
+              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition text-xs font-bold flex items-center justify-center gap-1.5 self-start shadow-sm"
+            >
+              {copiedFileIndex ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy File code</span>
+                </>
               )}
+            </button>
+          </div>
+
+          {/* EXPLORER TABS PANELS SPLIT */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-12 overflow-hidden min-h-[480px]">
+            {/* FILE EXPLORER SIDEBAR PANEL */}
+            <div className="md:col-span-4 bg-slate-50/60 border-r border-slate-200 p-3 flex flex-col gap-1.5 overflow-y-auto">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-2 mb-2 block">
+                Project Files Tree
+              </span>
+
+              {EXPO_CODE_FILES.map((file) => {
+                const isActive = selectedCodeFile.name === file.name;
+                return (
+                  <button
+                    key={file.name}
+                    onClick={() => setSelectedCodeFile(file)}
+                    className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-mono transition flex items-center justify-between ${
+                      isActive 
+                        ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold' 
+                        : 'border border-transparent text-slate-500 hover:text-slate-950 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <Code className="w-3.5 h-3.5 flex-shrink-0 text-indigo-500" />
+                      <span className="truncate">{file.name}</span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              <div className="mt-6 border-t border-slate-200 pt-4 px-2">
+                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2">Build Environment</h4>
+                <div className="flex flex-col gap-1.5 text-[10px] text-slate-500 leading-normal font-mono list-none">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block animate-pulse" />
+                    <span>expo-cli configured</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block" />
+                    <span>packages auto-linked</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block animate-pulse" />
+                    <span>websockets active</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SYNTAX HIGHLIGHTED CODE CONTAINER VIEW */}
+            <div className="md:col-span-8 flex flex-col p-4 bg-slate-900 overflow-auto">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3 text-[11px] text-slate-400 font-mono">
+                <span>Path: <strong className="text-slate-200">{selectedCodeFile.path}</strong></span>
+              </div>
+              <pre className="flex-1 font-mono text-[11.5px] text-indigo-200 bg-slate-950 p-4 rounded-xl whitespace-pre-wrap leading-relaxed overflow-x-auto overflow-y-auto max-h-[460px]">
+                <code>{selectedCodeFile.content}</code>
+              </pre>
             </div>
           </div>
         </section>
 
-        {/* RIGHT COLUMN: Code View Inspector */}
-        <section id="source-code-inspector" className="lg:col-span-7 flex flex-col h-[780px]">
-          <div className="mb-4">
-            <h3 className="text-md font-bold text-white flex items-center gap-2">
-              📂 Transformed React Native Files
-            </h3>
-            <p className="text-xs text-[#958da1]">Drop-ready code for your Expo navigation paths</p>
-          </div>
-          
-          <div className="flex-1">
-            <ReactNativeViewer />
-          </div>
-        </section>
       </main>
 
-      {/* Decorative Outer Ambient Grids */}
-      <footer className="border-t border-[#1f1f35]/30 bg-[#07070a] py-8 text-center text-xs text-[#958da1] mt-12">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p>© 2026 Google AI Studio Workspace • Crafted for ConsensuS Applet</p>
-          <div className="flex gap-6">
-            <span className="text-[#d2bbff] font-semibold">React Net Native (Expo)</span>
-            <span className="text-[#4edea3] font-semibold">Zustand Integrated</span>
-            <span className="text-[#fbbf24] font-semibold">Minimalist Theme</span>
-          </div>
-        </div>
+      {/* FOOTER COOPERATING BAR */}
+      <footer className="border-t border-slate-200 bg-[#f8fafc] py-4 px-6 text-center text-xs text-slate-500">
+        ConsensuS client-side and iOS/Android Expo mobile app codebase compiled and validated for Expo builders. 
+        © 2026 ConsensuS Team. All rights reserved.
       </footer>
     </div>
   );

@@ -1,6 +1,6 @@
 {
-  "name": "ConsensuS React Native Translator",
-  "description": "An interactive design playground and source code translator that perfectly converts the ConsensuS high-fidelity social wireframes into Expo React Native components.",
+  "name": "ConsensuS",
+  "description": "Sleek Tinder-style group decision-making mobile frontend and interactive sandbox.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
