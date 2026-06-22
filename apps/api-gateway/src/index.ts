@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { env } from "./config/env";
@@ -7,6 +7,7 @@ import { errorHandler } from "./middleware/errorHandler.middleware";
 import usersRoutes from "./routes/users.routes";
 import roomsRoutes from "./routes/rooms.routes";
 import contentRoutes from "./routes/content.routes";
+import qrRoutes from "./routes/qr.routes";
 import { logger } from "./utils/logger";
 
 const app = express();
@@ -19,6 +20,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok", env: env.NODE_ENV }))
 
 app.use("/api/users", usersRoutes);
 app.use("/api/rooms", roomsRoutes);
+app.use("/api/rooms", qrRoutes);   // mounts /:id/qr under /api/rooms
 app.use("/api/content", contentRoutes);
 
 app.use(errorHandler);

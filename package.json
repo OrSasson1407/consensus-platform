@@ -1,10 +1,11 @@
-{
+﻿{
   "name": "consensus-platform",
   "private": true,
-  "workspaces": ["packages/*", "apps/api-gateway"],
+  "workspaces": ["packages/*", "apps/api-gateway", "apps/mobile-app"],
   "scripts": {
     "dev:api": "npm run dev --workspace=apps/api-gateway",
     "build:api": "npm run build --workspace=apps/api-gateway",
+    "dev:mobile": "npm run start --workspace=apps/mobile-app",
     "docker:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker/docker-compose.yml down"
   }

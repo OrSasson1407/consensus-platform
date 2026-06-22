@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "api-gateway",
   "version": "1.0.0",
   "description": "API Gateway for ConsensuS",
@@ -15,7 +15,8 @@
     "express": "^4.19.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -24,6 +25,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.12.7",
     "@types/pg": "^8.11.6",
+    "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",
     "jest": "^29.7.0",
     "nodemon": "^3.1.0",
