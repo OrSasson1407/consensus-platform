@@ -18,6 +18,21 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "react-native": [
+        "./src/web-mocks/react-native.tsx"
+      ],
+      "expo-image": [
+        "./src/web-mocks/expo-image.tsx"
+      ],
+      "react-native-gesture-handler": [
+        "./src/web-mocks/react-native-gesture-handler.tsx"
+      ],
+      "react-native-reanimated": [
+        "./src/web-mocks/react-native-reanimated.tsx"
+      ],
+      "react-native-skeleton-content": [
+        "./src/web-mocks/react-native-skeleton-content.tsx"
       ]
     },
     "allowImportingTsExtensions": true,
