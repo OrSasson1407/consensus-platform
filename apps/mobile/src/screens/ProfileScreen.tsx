@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -66,12 +66,12 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation?.goBack()}>
-            <Text style={styles.backIcon}>➔</Text> {/* Or native icon */}
+            <Text style={styles.backIcon}>ג”</Text> {/* Or native icon */}
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
         </View>
         <TouchableOpacity style={styles.settingsBtn}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Text style={styles.settingsIcon}>ג™ן¸</Text>
         </TouchableOpacity>
       </View>
 
@@ -91,7 +91,7 @@ export default function ProfileScreen({ navigation }: any) {
               </Text>
             </View>
             <TouchableOpacity style={styles.editBadge}>
-              <Text style={styles.editBadgeIcon}>✏️</Text>
+              <Text style={styles.editBadgeIcon}>גן¸</Text>
             </TouchableOpacity>
             {/* Ambient visual glow blur */}
             <View style={styles.ambientGlow} />
@@ -109,7 +109,7 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.fieldStack}>
               <Text style={styles.fieldLabel}>Display Name</Text>
               <View style={styles.fieldWrapper}>
-                <Text style={styles.fieldIcon}>👤</Text>
+                <Text style={styles.fieldIcon}>נ‘₪</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={displayName}
@@ -122,13 +122,13 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={[styles.fieldStack, styles.readOnlyField]}>
               <Text style={styles.fieldLabel}>Verified Phone</Text>
               <View style={styles.readOnlyWrapper}>
-                <Text style={styles.fieldIcon}>📞</Text>
+                <Text style={styles.fieldIcon}>נ“</Text>
                 <TextInput
                   style={[styles.fieldInput, styles.fieldInputDisabled]}
                   value={user.phone}
                   editable={false}
                 />
-                <Text style={styles.verifiedBadge}>✓</Text>
+                <Text style={styles.verifiedBadge}>ג“</Text>
               </View>
             </View>
 
@@ -136,7 +136,7 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.fieldStack}>
               <Text style={styles.fieldLabel}>Email Address</Text>
               <View style={styles.fieldWrapper}>
-                <Text style={styles.fieldIcon}>✉️</Text>
+                <Text style={styles.fieldIcon}>ג‰ן¸</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={emailAddress}
@@ -448,3 +448,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   }
 });
+

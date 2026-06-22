@@ -37,5 +37,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "extends": "expo/tsconfig.base"
 }
